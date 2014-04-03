@@ -1,10 +1,23 @@
 #ifndef __LIGHT_H__
 #define __LIGHT_H__
-#include "Model.h"
+#include "cocos2d.h"
+
+using namespace cocos2d;
 
 namespace cocos3d
 {
-	
+	class CCLightTo : public CCActionInterval
+	{
+	public:
+		void update(float time);
+		virtual CCObject* copyWithZone(CCZone* pZone);
+	    virtual void startWithTarget(CCNode *pTarget);
+		bool initWithDuration(float duration, ccVertex3F& ambience, ccVertex3F& diffuse, ccVertex3F& specular);
+	public:
+		static CCLightTo* create(float duration, ccVertex3F& ambience, ccVertex3F& diffuse, ccVertex3F& specular);
+	private:
+		ccVertex3F m_fromAmbience, m_fromDiffuse, m_fromSpecular, m_toAmbience, m_toDiffuse, m_toSpecular;
+	};
 
 	struct ccVertex4F
 	{
@@ -18,7 +31,7 @@ namespace cocos3d
 		float x,y,z,w;
 	};
 
-	class Light : public CCObject
+	class Light : public CCNode
 	{
 	public:
 		static ccVertex3F CC_VERTEX_3F(float x, float y, float z)
@@ -42,8 +55,6 @@ namespace cocos3d
 		void setSpecular(const ccVertex3F& specular);
 		void setIntensity(const float);
 
-		void setParent(Model* model);
-
 		void setCutOffAngle(float angle){ m_cutoffAngleCosine = angle; }
 		void setSpotExponent(float exponent){ m_spotExponent = exponent; }
 
@@ -51,10 +62,12 @@ namespace cocos3d
 		const ccVertex3F& getDiffuse(){ return m_diffuse; }
 		const ccVertex3F& getSpecular(){ return m_specular; }
 		const ccVertex3F& getDirection(){ return m_direction; }
-		const ccVertex3F& getPosition(){ return m_position; }
+		const ccVertex3F& getLightPosition(){ return m_position; }
 		const float getIntensity(){ return m_intensity; }
 
 		bool isEnabled(){ return m_enabled; }
+
+		void setParentDirty();
 
 	protected:
 		ccVertex3F m_position;
@@ -68,9 +81,7 @@ namespace cocos3d
 		float m_cutoffAngleCosine;
 		bool m_enabled;
 
-		Model* m_parent;
-
-		friend class Model;
+		CCNode* m_parent;
 	};
 }
 #endif

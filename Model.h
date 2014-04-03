@@ -1,11 +1,11 @@
 #ifndef __MESH_H__
 #define __MESH_H__
-#include "Node3D.h"
 #include "MTLParser.h"
+#include <vector>
+#include "Node3D.h"
 
 namespace cocos3d
 {
-	class Light;
 
 	class Model : public Node3D, public CCRGBAProtocol
 	{
@@ -44,11 +44,6 @@ namespace cocos3d
 
 		virtual void draw3D();
 
-		virtual void addLight(Light* light);
-		virtual void removeLight(Light* light);
-		virtual void removeAllLights();
-		const std::vector<Light*>& getLights();
-
 		const ccVertex3F& getCenter();
 		float getRadius();
 
@@ -70,6 +65,11 @@ namespace cocos3d
 		virtual void updateDisplayedOpacity(GLubyte opacity){ CC_UNUSED_PARAM(opacity); }
 
 	protected:
+		virtual void addLight(Light* light);
+		virtual void removeLight(Light* light);
+		virtual void removeAllLights();  
+
+
 		void generateVBOs();
 		virtual void setupMatrices();
 		virtual void setupVertices();
@@ -80,21 +80,19 @@ namespace cocos3d
 		CCTexture2D* m_dTexture;
 		MTLParser m_parser;
 		CCGLProgram* m_program;
-		vector<Light*> m_lights;
-		bool m_lightsDirty;
 
 		ccVertex3F *m_lightsDiffuses,
 					*m_lightsAmbience,
 					*m_lightsPositions;
 
-		bool *m_lightsEnabled;
+		bool* m_lightsEnabled;
 		float* m_lightsIntensity;
-
+		
 		GLuint m_pVBO, m_tVBO, m_nVBO;
-		float m_dt;
 	private:
 		bool m_lines;
 		float m_opacity;
+		bool m_defaultLightUsed;
 	};
 }
 #endif

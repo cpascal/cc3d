@@ -18,7 +18,6 @@ Node3D::Node3D()
 , m_roll(0)
 , m_track(CCPoint(0,0))
 , m_dolly(CCPoint(0,0))
-, m_cameraDistance(2.0f)
 {
 	m_fullPosition.x = m_fullPosition.y = m_fullPosition.z = 0.0f;
 }
@@ -144,11 +143,6 @@ void Node3D::setPosition(const ccVertex3F& position)
 void Node3D::setPositionZ(float z)
 {
 	m_fullPosition.z = z;
-}
-
-void Node3D::setCameraDistance(float multiplier)
-{
-	m_cameraDistance = multiplier;
 }
 
 const ccVertex3F& Node3D::get3DPosition()

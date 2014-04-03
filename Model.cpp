@@ -1,5 +1,5 @@
 #include "Model.h"
-#include "Light.h"
+#include "Layer3D.h"
 #include "shaders.h"
 
 using namespace cocos3d;
@@ -11,18 +11,18 @@ Model::Model()
 , m_lines(false)
 , m_pVBO(0)
 , m_nVBO(0)
-, m_lightsDirty(false)
 , m_lightsAmbience(NULL)
 , m_lightsDiffuses(NULL)
 , m_lightsPositions(NULL)
 , m_lightsIntensity(NULL)
 , m_lightsEnabled(NULL)
+, m_defaultLightUsed(false)
 {
 	m_lightsAmbience = new ccVertex3F[MAX_LIGHTS]();
 	m_lightsDiffuses = new ccVertex3F[MAX_LIGHTS]();
 	m_lightsPositions = new ccVertex3F[MAX_LIGHTS]();
-	m_lightsIntensity = new float[MAX_LIGHTS];
-	m_lightsEnabled = new bool[MAX_LIGHTS];
+	m_lightsIntensity = new float[MAX_LIGHTS]();
+	m_lightsEnabled = new bool[MAX_LIGHTS]();
 }
 
 Model::~Model()
@@ -80,7 +80,10 @@ Model* Model::createWithBuffers(const string& obj,
 	}
 }
 
-bool Model::initWithFiles(const string& objFile, const string& mtlFile, float scale, const string& texture)
+bool Model::initWithFiles(const string& objFile, 
+						  const string& mtlFile, 
+						  float scale, 
+						  const string& texture)
 {
 	m_scale = scale;
 	
@@ -108,7 +111,12 @@ bool Model::initWithFiles(const string& objFile, const string& mtlFile, float sc
 	return pRet && Node3D::init();
 }
 
-bool Model::initWithBuffers(const string& obj, const string& mtl, float scale, const string& textureName, const char* textureBuffer, unsigned long size)
+bool Model::initWithBuffers(const string& obj,
+							const string& mtl, 
+							float scale, 
+							const string& textureName, 
+							const char* textureBuffer, 
+							unsigned long size)
 {
 	m_scale = scale;
 
@@ -168,8 +176,6 @@ void Model::generateVBOs()
 
 	m_parser.clearPositions();
 	m_parser.clearNormals();
-
-	m_dt = 0;
 }
 
 void Model::setScale(float scale)
@@ -190,34 +196,38 @@ void Model::setupLights()
 {
 	GLuint location;
 
-	if (m_lightsDirty == false && m_lights.size() == 0)
+	Layer3D* parent = (Layer3D*)m_pParent;
+
+	if (parent->getLights().size() == 0 && !m_defaultLightUsed)
 	{
 		clearLights();
 
-		Light* light = Light::create();
-
 		ccVertex3F ambient = { 0, 0, 0};
 		ccVertex3F diffuse = { 1, 1, 1};
-		ccVertex3F position = { 0, 0, getRadius()*2.0f };
+		ccVertex3F position = { -240 * m_scale, 426 * -m_scale, 739 * -m_scale };
 
-		light->setAmbientDiffuseSpecularIntensity(ambient, diffuse, ambient, 1.0);
-		light->setPosition(position);
-		light->setEnabled(true);
+		m_lightsAmbience[0] = ambient;
+		m_lightsDiffuses[0] = diffuse;
+		m_lightsIntensity[0] = 1.0f;
+		m_lightsPositions[0] = position;
+		m_lightsEnabled[0] = true;
 
-		addLight(light);
-
-		return;//lights are dirty. we'll skip a cycle to get light
+		m_defaultLightUsed = true;
 	}
 	else
-	if (m_lightsDirty)
+	if (parent->lightsDirty())
 	{
+		m_defaultLightUsed = false;
+
+		auto lights = parent->getLights();
+
 		clearLights();
 
 		int i = 0;
 
-		for (auto iter = m_lights.begin(); i < MAX_LIGHTS; i++)
+		for (auto iter = lights.begin(); i < MAX_LIGHTS; i++)
 		{
-			if (i < (int)m_lights.size() && iter != m_lights.end())
+			if (i < (int)lights.size() && iter != lights.end())
 			{
 				Light* light = *iter;
 
@@ -225,9 +235,9 @@ void Model::setupLights()
 				m_lightsDiffuses[i] = light->getDiffuse();
 				m_lightsIntensity[i] = light->getIntensity();
 
-				m_lightsPositions[i].x = light->getPosition().x * -m_scale;
-				m_lightsPositions[i].y = light->getPosition().y * -m_scale;
-				m_lightsPositions[i].z = light->getPosition().z * -m_scale;
+				m_lightsPositions[i].x = light->getLightPosition().x * m_scale;
+				m_lightsPositions[i].y = light->getLightPosition().y * -m_scale;
+				m_lightsPositions[i].z = light->getLightPosition().z * -m_scale;
 
 				if (light->isEnabled())
 					m_lightsEnabled[i] = true;
@@ -235,7 +245,7 @@ void Model::setupLights()
 				iter++;
 			}
 		}
-	}
+ 	}
 
 	location = getShaderProgram()->getUniformLocationForName("uLightEnabled");
 	if (location != -1)
@@ -256,8 +266,6 @@ void Model::setupLights()
 	location = getShaderProgram()->getUniformLocationForName("uLightIntensity");
 	if (location != -1)
 		glUniform1fv(location,  MAX_LIGHTS, (GLfloat*)m_lightsIntensity);
-
-	m_lightsDirty = false;
 }
 
 void Model::setupVertices()
@@ -327,7 +335,15 @@ void Model::setupMatrices()
 	kmVec3Fill(&center, size.width/2.0f, size.height/2.0f, 0);
 	kmVec3Fill(&up, 0.0f, 1.0f, 0.0f);
 	kmMat4LookAt(&matrixMV, &eye, &center, &up);
-	kmMat4Multiply(&matrixMV, &matrixM, &matrixMV);
+	kmMat4Multiply(&matrixMV, &matrixMV, &matrixM);
+
+	kmMat4 t,rot;
+	kmMat4Translation(&t,m_fullPosition.x + pDeltaX , m_fullPosition.y + pDeltaY, m_fullPosition.z);
+	kmQuaternionRotationYawPitchRoll(&quat, -m_yaw, -m_pitch, -m_roll);
+	kmMat4RotationQuaternion(&rot, &quat);
+	kmMat4Multiply(&t,&t,&rot);
+	kmMat4Multiply(&matrixMV, &matrixMV, &t);
+
 
 	//normal matrix
 	kmMat4Inverse(&normalMatrix, &matrixMV);
@@ -335,13 +351,6 @@ void Model::setupMatrices()
 
 	//MVP matrix
 	kmMat4Multiply(&matrixMVP, &matrixP, &matrixMV);
-
-	//translation rotation
-	kmQuaternionRotationYawPitchRoll(&quat, m_yaw, m_pitch, m_roll);
-	kmMat3RotationQuaternion(&rotation, &quat);
-	kmVec3Fill(&translation,m_fullPosition.x + pDeltaX , m_fullPosition.y + pDeltaY, m_fullPosition.z);
-	kmMat4RotationTranslation(&rotationAndMove, &rotation, &translation);
-	kmMat4Multiply(&matrixMVP, &matrixMVP, &rotationAndMove);
 	kmMat4Scaling(&scale, m_scale, m_scale, m_scale);
 	kmMat4Multiply(&matrixMVP, &matrixMVP, &scale);
 
@@ -426,10 +435,7 @@ void Model::addLight(Light* light)
 	}
 
 	m_lights.push_back(light);
-	light->setParent(this);
-	light->retain();
-
-	m_lightsDirty = true;
+	addChild(light);
 }
 
 void Model::removeLight(Light* light)
@@ -442,8 +448,7 @@ void Model::removeLight(Light* light)
 		if (*iter == light)
 		{
 			m_lights.erase(iter);
-			light->setParent(NULL);
-			light->release();
+			removeChild(light);
 			return;
 		}
 	}
@@ -456,18 +461,10 @@ void Model::removeAllLights()
 
 	for (auto iter = m_lights.begin(); iter != m_lights.end(); iter++)
 	{
-		Light* light = *iter;
-
-		light->setParent(NULL);
-		light->release();
+		removeChild(*iter);
 	}
 
 	m_lights.clear();
-}
-
-const std::vector<Light*>& Model::getLights()
-{
-	return m_lights;
 }
 
 const ccVertex3F& Model::getCenter()

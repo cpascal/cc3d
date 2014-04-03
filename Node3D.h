@@ -1,6 +1,8 @@
 #ifndef __NODE_3D_H__
 #define __NODE_3D_H__
 #include "cocos2d.h"
+#include "Light.h"
+#include <vector>
 
 using namespace cocos2d;
 
@@ -25,7 +27,6 @@ namespace cocos3d
 		virtual void setPosition(float x, float y, float z);
 		virtual void setPosition(const ccVertex3F& position);
 		virtual void setPositionZ(float z);
-		virtual void setCameraDistance(float multiplier);
 		virtual void setCameraTrackDelta(float trackX, float trackY);
 		virtual void setCameraDollyDelta(float dollyX, float dollyY);
 		virtual void setCameraTrackDelta(const CCPoint& track);
@@ -47,15 +48,20 @@ namespace cocos3d
 		virtual float getRoll(){ return m_roll; }
 		virtual float getPitch(){ return m_pitch; }
 
+		virtual void addLight(Light* light){ CC_UNUSED_PARAM(light); }
+		virtual void removeLight(Light* light){ CC_UNUSED_PARAM(light); };
+		virtual void removeAllLights(){}
+		virtual const std::vector<Light*>& getLights(){ return m_lights; }
+
 		virtual void draw();
 		virtual void draw3D(){}
 
 		
 	protected:
-		float m_cameraDistance;
 		CCPoint m_position, m_tempPosition, m_track, m_dolly;
 		ccVertex3F m_fullPosition, m_tempFullPosition;
 		float m_yaw, m_pitch, m_roll, m_scale;
+		std::vector<Light*> m_lights;
 	};
 }
 
