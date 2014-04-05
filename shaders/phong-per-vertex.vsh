@@ -25,7 +25,7 @@ void main()
 	// all following gemetric computations are performed in the				
 	// camera coordinate system (aka eye coordinates)			
 	
-	highp vec3 normal = vec3(CC_NormalMatrix * vec4(a_normal, 0.0));
+	highp vec3 normal = normalize(vec3(CC_NormalMatrix * vec4(a_normal, 0.0)));
 	vec4 vertPos4 = CC_MVMatrix * vec4(a_position, 1.0);
 
 	highp vec3 frontColor = vec3(0.0);
@@ -33,7 +33,7 @@ void main()
 	for (int i = 0; i < MAX_LIGHTS; i++)
 	{	
 		highp vec3 vertPos = vec3(vertPos4) / vertPos4.w;
-		highp vec3 lightDir = normalize(uLightPosition[i] - vertPos);
+		highp vec3 lightDir = normalize(vertPos - uLightPosition[i]);
 		highp vec3 reflectDir = reflect(-lightDir, normal);
 		highp vec3 viewDir = normalize(vertPos);
 		float lambertian = max(dot(lightDir,normal), 0.0);

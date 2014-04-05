@@ -1,6 +1,7 @@
 #include "Layer3D.h"
 #include "Node3D.h"
 #include "Light.h"
+#include "Camera.h"
 
 using namespace cocos3d;
 
@@ -8,8 +9,31 @@ bool Layer3D::init()
 {
 	m_fixedLights = true;
 	m_lightsDirty = false;
+	m_camera = NULL;
 
 	return true;
+}
+
+void Layer3D::visit()
+{
+	if (m_camera == NULL)
+		add3DCamera(Camera::create());
+
+	CCLayer::visit();
+}
+
+void Layer3D::add3DCamera(Camera* camera)
+{
+	if (m_camera != NULL)
+		m_camera->release();
+
+	m_camera = camera;
+	addChild(camera);
+}
+
+Camera* Layer3D::get3DCamera()
+{
+	return m_camera;
 }
 
 void Layer3D::addLight(Light* light)

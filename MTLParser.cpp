@@ -292,6 +292,9 @@ void MTLParser::getBounds()
     height = yMax - yMin;
     length = zMax - zMin;
 
+	kmVec3Fill(&m_aabb.min, xMin, yMin, zMin);
+	kmVec3Fill(&m_aabb.max, xMax, yMax, zMax);
+
 	m_size.x = width;
 	m_size.y = height;
 	m_size.z = length;

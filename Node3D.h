@@ -27,19 +27,11 @@ namespace cocos3d
 		virtual void setPosition(float x, float y, float z);
 		virtual void setPosition(const ccVertex3F& position);
 		virtual void setPositionZ(float z);
-		virtual void setCameraTrackDelta(float trackX, float trackY);
-		virtual void setCameraDollyDelta(float dollyX, float dollyY);
-		virtual void setCameraTrackDelta(const CCPoint& track);
-		virtual void setCameraDollyDelta(const CCPoint& dolly);
-		virtual void setCameraTrackDeltaX(float trackX);
-		virtual void setCameraDollyDeltaX(float dollyX);
-		virtual void setCameraTrackDeltaY(float trackY);
-		virtual void setCameraDollyDeltaY(float dollyY);
 
 		virtual void visit();
 
-		virtual void setYawnPitchRoll(const ccVertex3F& ypr);  
-		virtual void setYawnPitchRoll(const float yaw, const float pitch, const float roll);
+		virtual void setYawPitchRoll(const ccVertex3F& ypr);
+		virtual void setYawPitchRoll(const float yaw, const float pitch, const float roll);
 		virtual void setYaw(const float yaw);
 		virtual void setPitch(const float pitch);
 		virtual void setRoll(const float roll);
@@ -47,6 +39,10 @@ namespace cocos3d
 		virtual float getYaw(){ return m_yaw; }
 		virtual float getRoll(){ return m_roll; }
 		virtual float getPitch(){ return m_pitch; }
+
+		virtual float getRadius(){ return 0; }
+		virtual const ccVertex3F& getCenter(){ return m_center; }
+		virtual const kmAABB& getBoundingBox(){ return m_bbox;}
 
 		virtual void addLight(Light* light){ CC_UNUSED_PARAM(light); }
 		virtual void removeLight(Light* light){ CC_UNUSED_PARAM(light); };
@@ -59,9 +55,11 @@ namespace cocos3d
 		
 	protected:
 		CCPoint m_position, m_tempPosition, m_track, m_dolly;
-		ccVertex3F m_fullPosition, m_tempFullPosition;
+		ccVertex3F m_fullPosition, m_tempFullPosition, m_center;
 		float m_yaw, m_pitch, m_roll, m_scale;
 		std::vector<Light*> m_lights;
+		bool m_dirty;
+		kmAABB m_bbox;
 	};
 }
 

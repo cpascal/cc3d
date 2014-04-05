@@ -1,5 +1,6 @@
 #include "Model.h"
 #include "Layer3D.h"
+#include "Camera.h"
 #include "shaders.h"
 
 using namespace cocos3d;
@@ -40,13 +41,14 @@ Model::~Model()
 	delete [] m_lightsEnabled;
 }
 
-Model* Model::createWithFiles(const string& objFile, 
+Model* Model::createWithFiles(const string& id,
+							  const string& objFile, 
 							  const string& mtlFile, 
 							  float scale,
 							  const string& texture)
 {
 	Model *pRet = new Model();
-	if (pRet && pRet->initWithFiles(objFile,mtlFile,scale, texture))
+	if (pRet && pRet->initWithFiles(id,objFile,mtlFile,scale, texture))
 	{
 		pRet->autorelease();
 		return pRet;
@@ -59,7 +61,8 @@ Model* Model::createWithFiles(const string& objFile,
 	}
 }
 
-Model* Model::createWithBuffers(const string& obj, 
+Model* Model::createWithBuffers(const string& id,
+								const string& obj, 
 								const string& mtl, 
 								float scale,
 								const string& textureName, 
@@ -67,7 +70,7 @@ Model* Model::createWithBuffers(const string& obj,
 								unsigned long size)
 {
 	Model *pRet = new Model();
-	if (pRet && pRet->initWithBuffers(obj,mtl,scale,textureName,textureBuffer,size))
+	if (pRet && pRet->initWithBuffers(id,obj,mtl,scale,textureName,textureBuffer,size))
 	{
 		pRet->autorelease();
 		return pRet;
@@ -80,11 +83,13 @@ Model* Model::createWithBuffers(const string& obj,
 	}
 }
 
-bool Model::initWithFiles(const string& objFile, 
+bool Model::initWithFiles(const string& id,
+						  const string& objFile, 
 						  const string& mtlFile, 
 						  float scale, 
 						  const string& texture)
 {
+	m_id = id;
 	m_scale = scale;
 	
 	if (texture != "")
@@ -111,13 +116,15 @@ bool Model::initWithFiles(const string& objFile,
 	return pRet && Node3D::init();
 }
 
-bool Model::initWithBuffers(const string& obj,
+bool Model::initWithBuffers(const string& id,
+							const string& obj,
 							const string& mtl, 
 							float scale, 
 							const string& textureName, 
 							const char* textureBuffer, 
 							unsigned long size)
 {
+	m_id = id;
 	m_scale = scale;
 
 	if (textureName != "")
@@ -204,7 +211,7 @@ void Model::setupLights()
 
 		ccVertex3F ambient = { 0, 0, 0};
 		ccVertex3F diffuse = { 1, 1, 1};
-		ccVertex3F position = { -240 * m_scale, 426 * -m_scale, 739 * -m_scale };
+		ccVertex3F position = { 2400 , 852, 736 * 2 };
 
 		m_lightsAmbience[0] = ambient;
 		m_lightsDiffuses[0] = diffuse;
@@ -213,6 +220,8 @@ void Model::setupLights()
 		m_lightsEnabled[0] = true;
 
 		m_defaultLightUsed = true;
+
+		parent->cleanDirtyLights();
 	}
 	else
 	if (parent->lightsDirty())
@@ -236,8 +245,8 @@ void Model::setupLights()
 				m_lightsIntensity[i] = light->getIntensity();
 
 				m_lightsPositions[i].x = light->getLightPosition().x * m_scale;
-				m_lightsPositions[i].y = light->getLightPosition().y * -m_scale;
-				m_lightsPositions[i].z = light->getLightPosition().z * -m_scale;
+				m_lightsPositions[i].y = light->getLightPosition().y * m_scale;
+				m_lightsPositions[i].z = light->getLightPosition().z * m_scale;
 
 				if (light->isEnabled())
 					m_lightsEnabled[i] = true;
@@ -296,73 +305,154 @@ void Model::setupVertices()
 	}
 }
 
+void Model::transformAABB(const kmAABB& box)
+{
+	kmVec3 v[8];
+
+	kmVec3Fill(&v[0],box.min.x,box.max.y, box.max.z);
+	kmVec3Fill(&v[1],box.min.x,box.max.y, box.min.z);
+	kmVec3Fill(&v[2],box.max.x,box.max.y, box.min.z);
+	kmVec3Fill(&v[3],box.max.x,box.max.y, box.max.z);
+	kmVec3Fill(&v[4],box.min.x,box.min.y, box.max.z);
+	kmVec3Fill(&v[5],box.min.x,box.min.y, box.min.z);
+	kmVec3Fill(&v[6],box.max.x,box.min.y, box.min.z);
+	kmVec3Fill(&v[7],box.max.x,box.min.y, box.max.z);
+
+	Camera* camera = ((Layer3D*)getParent())->get3DCamera();
+
+	kmMat4 t;
+	kmMat4Translation(&t, CCDirector::sharedDirector()->getWinSize().width/2.0f, CCDirector::sharedDirector()->getWinSize().height/2.0f, camera->get3DPosition().z/2.0f );
+
+	for (int i = 0; i < 8 ; i++)
+	{
+		kmVec3TransformCoord(&v[i],&v[i],&m_matrixMV);
+		kmVec3TransformCoord(&v[i],&v[i],&t);
+	}
+
+#if (CC_TARGET_PLATFORM != CC_PLATFORM_ANDROID)
+#undef max()
+#undef min()
+#endif
+
+	float xMax = numeric_limits<float>::min();
+    float yMax = numeric_limits<float>::min();
+    float zMax = numeric_limits<float>::min();
+
+    float xMin = numeric_limits<float>::max();
+    float yMin = numeric_limits<float>::max();
+    float zMin = numeric_limits<float>::max();
+
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+
+    int numVerts = 8;
+
+    for (int i = 0; i < numVerts; ++i)
+    {
+        x = v[i].x;
+        y = v[i].y;
+        z = v[i].z;
+
+        if (x < xMin)
+            xMin = x;
+
+        if (x > xMax)
+            xMax = x;
+
+        if (y < yMin)
+            yMin = y;
+
+        if (y > yMax)
+            yMax = y;
+
+        if (z < zMin)
+            zMin = z;
+
+        if (z > zMax)
+            zMax = z;
+    }
+
+	
+
+	kmVec3Fill(&(m_bbox.min), xMin, yMin, zMin);
+	kmVec3Fill(&(m_bbox.max), xMax, yMax, zMax);
+}
+
 void Model::setupMatrices()
 {
 	CCSize size = CCDirector::sharedDirector()->getWinSize();
+	Layer3D* parent = dynamic_cast<Layer3D*>(m_pParent);
 
-	kmMat4 matrixP;
-	kmMat4 matrixM;
-	kmMat4 matrixMV;
-	kmMat4 matrixMVP;	
-	kmMat4 normalMatrix; // As 4x4. Shader has the responsability of making it the top-left 3x3
-	kmMat3 rotation;
-	kmVec3 translation;
-	kmMat4 rotationAndMove;
-	kmMat4 scale;
-	kmVec3 eye, center, up;
-	kmQuaternion quat;
-	GLuint location;
-
-	float eyeZ = size.height / 1.1566f;
-	//Adjust to parent layer
-	float pDeltaX = 0.0f; 
-	float pDeltaY = 0.0f;
-
-	if (getParent() != NULL)
+	if (m_dirty || parent->get3DCamera()->isDirty())
 	{
-		pDeltaX = getParent()->getPositionX();
-		pDeltaY = getParent()->getPositionY();
+		parent->get3DCamera()->notDirty();
+
+		const kmMat4 matrixP = parent->get3DCamera()->getProjectionMatrix();	
+		kmMat4 rotation;
+		kmMat4 translation;
+		kmMat4 scale; 
+		kmQuaternion quat;
+
+		float eyeZ = size.height / 1.1566f;
+		//Adjust to parent layer
+		float pDeltaX = 0.0f; 
+		float pDeltaY = 0.0f;
+
+		if (getParent() != NULL)
+		{
+			pDeltaX = getParent()->getPositionX();
+			pDeltaY = getParent()->getPositionY();
+		}
+
+		//model matrix
+		kmMat4Identity(&m_matrixM);
+
+		//model view matrix
+		kmMat4Multiply(&m_matrixMV, &(parent->get3DCamera()->getViewMatrix()), &m_matrixM);
+
+		//transformations
+		kmMat4Translation(&translation,m_fullPosition.x + pDeltaX , m_fullPosition.y + pDeltaY, m_fullPosition.z);
+		kmQuaternionRotationYawPitchRoll(&quat, -m_yaw, -m_pitch, -m_roll);
+		kmMat4RotationQuaternion(&rotation, &quat);
+		kmMat4Multiply(&translation,&translation,&rotation);
+		kmMat4Multiply(&m_matrixMV, &m_matrixMV, &translation);
+		kmMat4Scaling(&scale, m_scale, m_scale, m_scale);
+		kmMat4Multiply(&m_matrixMV, &m_matrixMV, &scale);
+
+		//normal matrix
+		kmMat4Inverse(&m_matrixNormal, &m_matrixMV);
+		kmMat4Transpose(&m_matrixNormal, &m_matrixNormal);
+
+		//MVP matrix
+		kmMat4Multiply(&m_matrixMVP, &matrixP, &m_matrixMV);
+
+		transformAABB(m_parser.m_aabb);
+
+		m_outOfCamera = parent->get3DCamera()->isObjectVisible(this,m_matrixMVP);
+
+		//debug
+		if (m_outOfCamera)
+		{
+			string s = "";
+		}
+		else
+		{
+			string s = "";
+		}
 	}
 
-	//projection
-	kmGLGetMatrix(KM_GL_PROJECTION, &matrixP);
-
-	//model matrix
-	kmMat4Identity(&matrixM);
-
-	//View matrix
-	kmVec3Fill(&eye, size.width/2.0f, size.height/2.0f, eyeZ);
-	kmVec3Fill(&center, size.width/2.0f, size.height/2.0f, 0);
-	kmVec3Fill(&up, 0.0f, 1.0f, 0.0f);
-	kmMat4LookAt(&matrixMV, &eye, &center, &up);
-	kmMat4Multiply(&matrixMV, &matrixMV, &matrixM);
-
-	kmMat4 t,rot;
-	kmMat4Translation(&t,m_fullPosition.x + pDeltaX , m_fullPosition.y + pDeltaY, m_fullPosition.z);
-	kmQuaternionRotationYawPitchRoll(&quat, -m_yaw, -m_pitch, -m_roll);
-	kmMat4RotationQuaternion(&rot, &quat);
-	kmMat4Multiply(&t,&t,&rot);
-	kmMat4Multiply(&matrixMV, &matrixMV, &t);
-
-
-	//normal matrix
-	kmMat4Inverse(&normalMatrix, &matrixMV);
-	kmMat4Transpose(&normalMatrix, &normalMatrix);
-
-	//MVP matrix
-	kmMat4Multiply(&matrixMVP, &matrixP, &matrixMV);
-	kmMat4Scaling(&scale, m_scale, m_scale, m_scale);
-	kmMat4Multiply(&matrixMVP, &matrixMVP, &scale);
+	GLuint location;
 
 	//pass matrices to shader
 	location = getShaderProgram()->getUniformLocationForName("CC_MVPMatrix");
-	getShaderProgram()->setUniformLocationWithMatrix4fv(location, matrixMVP.mat, 1);
+	getShaderProgram()->setUniformLocationWithMatrix4fv(location, m_matrixMVP.mat, 1);
 
 	location = getShaderProgram()->getUniformLocationForName("CC_MVMatrix");
-	getShaderProgram()->setUniformLocationWithMatrix4fv(location, matrixMV.mat, 1);
+	getShaderProgram()->setUniformLocationWithMatrix4fv(location, m_matrixMV.mat, 1);
 
 	location = getShaderProgram()->getUniformLocationForName("CC_NormalMatrix");
-	glUniformMatrix4fv(location, 1, 0, normalMatrix.mat);
+	glUniformMatrix4fv(location, 1, 0, m_matrixNormal.mat);
 
 	location = getShaderProgram()->getUniformLocationForName("mode");
 	glUniform1i(location, 4);
@@ -407,6 +497,30 @@ void Model::draw3D()
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	CHECK_GL_ERROR_DEBUG();	
+
+	CCGLProgram* program = CCShaderCache::sharedShaderCache()->programForKey(kCCShader_PositionColor);
+	program->setUniformsForBuiltins();
+	program->use();
+	
+	GLint loc = program->getUniformLocationForName("CC_MVPMatrix");
+	getShaderProgram()->setUniformLocationWithMatrix4fv(loc, m_matrixMVP.mat, 1);
+	
+	CCPoint points[8];
+	
+	points[0].x = m_parser.m_aabb.min.x; points[0].y = m_parser.m_aabb.min.y; 
+	points[1].x = m_parser.m_aabb.min.x; points[1].y = m_parser.m_aabb.max.y; 
+	
+	points[2].x = m_parser.m_aabb.min.x; points[2].y = m_parser.m_aabb.max.y; 
+	points[3].x = m_parser.m_aabb.max.x; points[3].y = m_parser.m_aabb.max.y; 
+	
+	points[4].x = m_parser.m_aabb.max.x; points[4].y = m_parser.m_aabb.max.y; 
+	points[5].x = m_parser.m_aabb.max.x; points[5].y = m_parser.m_aabb.min.y;
+	
+	points[6].x = m_parser.m_aabb.max.x; points[6].y = m_parser.m_aabb.min.y; 
+	points[7].x = m_parser.m_aabb.min.x; points[7].y = m_parser.m_aabb.min.y; 
+	
+	glVertexAttribPointer(kCCVertexAttrib_Position, 2, GL_FLOAT, GL_FALSE, 0, points);
+ 	glDrawArrays(GL_LINES, 0, 8);
 }
 
 void Model::setupMaterial(const ccVertex3F& diffuses, const ccVertex3F& speculars)
@@ -420,59 +534,13 @@ void Model::setupMaterial(const ccVertex3F& diffuses, const ccVertex3F& specular
 	getShaderProgram()->setUniformLocationWith3f(location,speculars.x,speculars.y,speculars.z);
 }
 
-void Model::addLight(Light* light)
-{
-	if (light == NULL)
-		return;
-
-	if (m_lights.size() == MAX_LIGHTS)
-		return; // Output a warning
-
-	for (auto iter = m_lights.begin(); iter != m_lights.end(); iter++)
-	{
-		if (*iter == light)
-			return;
-	}
-
-	m_lights.push_back(light);
-	addChild(light);
-}
-
-void Model::removeLight(Light* light)
-{
-	if (m_lights.size() == 0)
-		return;
-
-	for (auto iter = m_lights.begin(); iter != m_lights.end(); iter++)
-	{
-		if (*iter == light)
-		{
-			m_lights.erase(iter);
-			removeChild(light);
-			return;
-		}
-	}
-}
-
-void Model::removeAllLights()
-{
-	if (m_lights.size() == 0)
-		return;
-
-	for (auto iter = m_lights.begin(); iter != m_lights.end(); iter++)
-	{
-		removeChild(*iter);
-	}
-
-	m_lights.clear();
-}
-
 const ccVertex3F& Model::getCenter()
 { 
-	return m_parser.getCenter(); 
+	return get3DPosition();
+	//return m_parser.getCenter(); 
 }
 
 float Model::getRadius()
 { 
-	return m_parser.getRadius();
+	return m_parser.getRadius() * m_scale;
 }

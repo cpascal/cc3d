@@ -3,16 +3,6 @@
 
 using namespace cocos3d;
 
-#define UNIFORM_ENABLE "u_cc3LightIsLightEnabled"
-#define UNIFORM_POSITION "u_cc3LightPositionModel"
-#define UNIFORM_AMBIENT "u_cc3LightAmbientColor"
-#define UNIFORM_DIFFUSE "u_cc3LightDiffuseColor"
-#define UNIFORM_SPECULAR "u_cc3LightSpecularColor"
-#define UNIFORM_ATTENUATION "u_cc3LightAttenuation"
-#define UNIFORM_DIRECTION "u_cc3LightSpotDirectionModel"
-#define UNIFORM_SPOT_EXPONENT "u_cc3LightSpotExponent"
-#define UNIFORM_CUTTOFF_ANGLE "u_cc3LightSpotCutoffAngleCosine"
-
 CCLightTo* CCLightTo::create(float duration, ccVertex3F& ambience, ccVertex3F& diffuse, ccVertex3F& specular)
 {
     CCLightTo* pAction = new CCLightTo();

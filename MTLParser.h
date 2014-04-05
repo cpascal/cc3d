@@ -73,6 +73,7 @@ namespace cocos3d
 		float m_scale;
 		int m_partsPerFace;
 		bool m_copied;
+		kmAABB m_aabb;
 
 		friend class Model;
 	};

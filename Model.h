@@ -3,6 +3,7 @@
 #include "MTLParser.h"
 #include <vector>
 #include "Node3D.h"
+#include "Camera.h"
 
 namespace cocos3d
 {
@@ -14,12 +15,14 @@ namespace cocos3d
 		Model();
 		~Model();
 
-		static Model* createWithFiles(const string& objFile, 
+		static Model* createWithFiles(const string& id,
+									  const string& objFile, 
 									  const string& mtlFile, 
 									  float scale = 1.0f, 
 									  const string& texture = "");
 
-		static Model* createWithBuffers(const string& obj, 
+		static Model* createWithBuffers(const string& id,
+										const string& obj, 
 										const string& mtl, 
 										float scale = 1.0f,
 										const string& textureName = "", 
@@ -28,12 +31,14 @@ namespace cocos3d
 
 		virtual void setScale(float scale);
 
-		virtual bool initWithFiles(const string& objFile, 
+		virtual bool initWithFiles(const string& id,
+								   const string& objFile, 
 								   const string& mtlFile, 
 								   float scale = 1.0f, 
 								   const string& texture = "");
 
-		virtual bool initWithBuffers(const string& obj,
+		virtual bool initWithBuffers(const string& id,
+									 const string& obj,
 									 const string& mtl, 
 									 float scale = 1.0f, 
 									 const string& textureName = "", 
@@ -44,8 +49,8 @@ namespace cocos3d
 
 		virtual void draw3D();
 
-		const ccVertex3F& getCenter();
-		float getRadius();
+		virtual const ccVertex3F& getCenter();
+		virtual float getRadius();
 
 		//CCRGBA protocol
 
@@ -64,17 +69,17 @@ namespace cocos3d
 		virtual void setCascadeOpacityEnabled(bool cascadeOpacityEnabled){ CC_UNUSED_PARAM(cascadeOpacityEnabled); }
 		virtual void updateDisplayedOpacity(GLubyte opacity){ CC_UNUSED_PARAM(opacity); }
 
+		bool outOfCamera(){ return m_outOfCamera; }
+
 	protected:
-		virtual void addLight(Light* light);
-		virtual void removeLight(Light* light);
-		virtual void removeAllLights();  
-
-
 		void generateVBOs();
 		virtual void setupMatrices();
 		virtual void setupVertices();
 		virtual void setupLights();
 		void setupMaterial(const ccVertex3F& diffuse, const ccVertex3F& specular);
+
+		void transformAABB(const kmAABB& box);
+
 		void clearLights();
 
 		CCTexture2D* m_dTexture;
@@ -88,11 +93,20 @@ namespace cocos3d
 		bool* m_lightsEnabled;
 		float* m_lightsIntensity;
 		
-		GLuint m_pVBO, m_tVBO, m_nVBO;
+		GLuint m_pVBO,
+			   m_tVBO,
+			   m_nVBO;
+
+		kmMat4 m_matrixM,
+			   m_matrixMV,
+			   m_matrixMVP,
+			   m_matrixNormal; 
 	private:
 		bool m_lines;
 		float m_opacity;
 		bool m_defaultLightUsed;
+		bool m_outOfCamera;
+		string m_id;
 	};
 }
 #endif
