@@ -32,13 +32,14 @@ namespace cocos3d
 		void cleanDirtyLights(){ m_lightsDirty = false; }
 
 		virtual void setPosition(const CCPoint& position);
-		virtual void setPositionX(float posX);
-		virtual void setPositionY(float posY);
+		virtual void setPositionX(float posX){ setPosition(CCPoint(posX, getPositionY())); }
+		virtual void setPositionY(float posY){ setPosition(CCPoint(getPositionX(), posY)); }
 	private:
 		void createDefaultCamera();
 		std::vector<Light*> m_lights;
 		bool m_fixedLights, m_lightsDirty;
 		Camera* m_camera;
+		ccVertex3F m_originalCamPos, m_originalCamCenter;
 
 		friend class Light;
 	};

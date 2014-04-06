@@ -28,6 +28,8 @@ void Layer3D::add3DCamera(Camera* camera)
 		m_camera->release();
 
 	m_camera = camera;
+	m_originalCamPos = m_camera->get3DPosition();
+	m_originalCamCenter = m_camera->getLookAt();
 	addChild(camera);
 }
 
@@ -92,8 +94,6 @@ void Layer3D::setFixedLights(bool fixedLights)
 
 void Layer3D::setPosition(const CCPoint& position)
 {
-	CCLayer::setPosition(position);
-
 	if (!m_fixedLights)
 	{
 		for (auto iter = m_lights.begin(); 
@@ -113,54 +113,22 @@ void Layer3D::setPosition(const CCPoint& position)
 
 		m_lightsDirty = true;
 	}
-}
 
-void Layer3D::setPositionX(float posX)
-{
-	CCLayer::setPositionX(posX);
-
-	if (!m_fixedLights)
+	if (m_camera != NULL)
 	{
-		for (auto iter = m_lights.begin(); 
-			 iter != m_lights.end();
-			 iter++)
-		{
-			Light* light = *iter;
+		const ccVertex3F camPos = m_camera->get3DPosition();
+		const ccVertex3F lookAt = m_camera->getLookAt();
+	
+		CCSize size = CCDirector::sharedDirector()->getWinSize();
 
-			ccVertex3F newPosition = 
-			{ 
-				 light->getPosition().x + posX, 
-				 light->getPosition().y + getPositionY()
-			};
-
-			light->setPosition(newPosition);
-		}
-
-		m_lightsDirty = true;
+		//FIXME: We are fixing the camera at the middle!!!!!
+		ccVertex3F newPos = { size.width/2.0 - position.x, size.height/2.0 - position.y, camPos.z };
+		ccVertex3F newLookAt = { newPos.x, newPos.y, lookAt.z };
+		
+		m_camera->setPosition(newPos);
+		m_camera->lookAt(newLookAt);
+		
 	}
-}
 
-void Layer3D::setPositionY(float posY)
-{
-	CCLayer::setPositionY(posY);
-
-	if (!m_fixedLights)
-	{
-		for (auto iter = m_lights.begin(); 
-			 iter != m_lights.end();
-			 iter++)
-		{
-			Light* light = *iter;
-
-			ccVertex3F newPosition = 
-			{ 
-				 light->getPosition().x + getPositionX(), 
-				 light->getPosition().y + posY
-			};
-
-			light->setPosition(newPosition);
-		}
-
-		m_lightsDirty = true;
-	}
+	CCLayer::setPosition(position);
 }

@@ -76,6 +76,15 @@ void Camera::lookAt(const CCPoint& position)
 	recalculateView();
 }
 
+const ccVertex3F& Camera::getLookAt()
+{
+	m_lookAt3d.x = m_center.x;
+	m_lookAt3d.y = m_center.y;
+	m_lookAt3d.z = m_center.z;
+
+	return m_lookAt3d;
+}
+
 void Camera::setUp(const ccVertex3F& up)
 {
 	m_up.x = up.x;
@@ -150,26 +159,23 @@ void Camera::setNearFar(float nearV, float farV)
 	recalculateProjection();
 }
 
-bool Camera::isObjectVisible(Node3D* node, kmMat4& mvp)
-{
-	Frustum frustum(this,mvp);
-
-	kmAABB box;
-	kmAABB tmp = node->getBoundingBox();
-
-	return frustum.isBoxInFrustumPerPoint(tmp,Frustum::BOTTOM);
-}
-
 bool Camera::isObjectVisible(Node3D* node, kmMat4& mvp, Frustum::Planes plane)
 {
 	Frustum frustum(this,mvp);
 
-	kmAABB box;
 	kmAABB tmp = node->getBoundingBox();
-	
-	//return frustum.isPointInFrustum(p);
 
 	return frustum.isBoxInFrustumPerPoint(tmp,plane);
+}
+
+bool Camera::isDirty()
+{ 
+	return m_dirty;
+}
+
+void Camera::notDirty()
+{
+	m_dirty = false;
 }
 
 Frustum::Frustum(Camera* camera, kmMat4& mvp)
@@ -221,14 +227,14 @@ bool Frustum::isBoxInFrustumPerPoint(kmAABB& box, Planes plane)
 
 	for (int i = 0; i < 8; i++)
 	{
-		if (plane == N_PLANES)
+		if (plane == ALL_PLANES)
 		{
 			if (isPointInFrustum(v[i]))
 				return true;
 		}
 		else
 		{
-			if (isPointInFrustum(v[i],BOTTOM));
+			if (isPointInFrustum(v[i],plane));
 				return true;
 		}
 	}
@@ -239,10 +245,8 @@ bool Frustum::isBoxInFrustumPerPoint(kmAABB& box, Planes plane)
 bool Frustum::isBoxInFrustum(kmAABB& box)
 {
 	bool result = true;
-    int indexFirst = 0;
-    int indexNumber = N_PLANES;
     
-    for(int i = 0; i < N_PLANES; i++)
+    for(int i = 0; i < ALL_PLANES; i++)
     {
         kmPlane plane = m_planes[static_cast<Planes>(i)];
         kmVec3 normal = {plane.a, plane.b, plane.c};
@@ -261,7 +265,7 @@ bool Frustum::isBoxInFrustum(kmAABB& box)
 
 bool Frustum::isPointInFrustum(kmVec3 &p)
 {
-    for(int i = 0; i < N_PLANES; i++)
+    for(int i = 0; i < ALL_PLANES; i++)
     {
         if(kmPlaneDotCoord(&m_planes[static_cast<Planes>(i)], &p) < 0)
             return false;

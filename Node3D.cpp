@@ -16,8 +16,6 @@ Node3D::Node3D()
 , m_yaw(0)
 , m_pitch(0)
 , m_roll(0)
-, m_track(CCPoint(0,0))
-, m_dolly(CCPoint(0,0))
 , m_dirty(true)
 {
 	m_fullPosition.x = m_fullPosition.y = m_fullPosition.z = 0.0f;

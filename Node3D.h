@@ -54,7 +54,7 @@ namespace cocos3d
 
 		
 	protected:
-		CCPoint m_position, m_tempPosition, m_track, m_dolly;
+		CCPoint m_position, m_tempPosition;
 		ccVertex3F m_fullPosition, m_tempFullPosition, m_center;
 		float m_yaw, m_pitch, m_roll, m_scale;
 		std::vector<Light*> m_lights;

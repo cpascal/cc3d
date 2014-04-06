@@ -18,6 +18,7 @@ Model::Model()
 , m_lightsIntensity(NULL)
 , m_lightsEnabled(NULL)
 , m_defaultLightUsed(false)
+, m_drawOBB(false)
 {
 	m_lightsAmbience = new ccVertex3F[MAX_LIGHTS]();
 	m_lightsDiffuses = new ccVertex3F[MAX_LIGHTS]();
@@ -308,6 +309,7 @@ void Model::setupVertices()
 void Model::transformAABB(const kmAABB& box)
 {
 	kmVec3 v[8];
+	CCSize size = CCDirector::sharedDirector()->getWinSize();
 
 	kmVec3Fill(&v[0],box.min.x,box.max.y, box.max.z);
 	kmVec3Fill(&v[1],box.min.x,box.max.y, box.min.z);
@@ -321,8 +323,7 @@ void Model::transformAABB(const kmAABB& box)
 	Camera* camera = ((Layer3D*)getParent())->get3DCamera();
 
 	kmMat4 t;
-	kmMat4Translation(&t, CCDirector::sharedDirector()->getWinSize().width/2.0f, CCDirector::sharedDirector()->getWinSize().height/2.0f, camera->get3DPosition().z/2.0f );
-
+	kmMat4Translation(&t, size.width/2.0f, size.height/2.0f, CCDirector::sharedDirector()->getZEye());
 	for (int i = 0; i < 8 ; i++)
 	{
 		kmVec3TransformCoord(&v[i],&v[i],&m_matrixMV);
@@ -373,8 +374,6 @@ void Model::transformAABB(const kmAABB& box)
             zMax = z;
     }
 
-	
-
 	kmVec3Fill(&(m_bbox.min), xMin, yMin, zMin);
 	kmVec3Fill(&(m_bbox.max), xMax, yMax, zMax);
 }
@@ -395,30 +394,19 @@ void Model::setupMatrices()
 		kmQuaternion quat;
 
 		float eyeZ = size.height / 1.1566f;
-		//Adjust to parent layer
-		float pDeltaX = 0.0f; 
-		float pDeltaY = 0.0f;
-
-		if (getParent() != NULL)
-		{
-			pDeltaX = getParent()->getPositionX();
-			pDeltaY = getParent()->getPositionY();
-		}
 
 		//model matrix
 		kmMat4Identity(&m_matrixM);
-
-		//model view matrix
-		kmMat4Multiply(&m_matrixMV, &(parent->get3DCamera()->getViewMatrix()), &m_matrixM);
-
-		//transformations
-		kmMat4Translation(&translation,m_fullPosition.x + pDeltaX , m_fullPosition.y + pDeltaY, m_fullPosition.z);
+		kmMat4Translation(&translation,m_fullPosition.x, m_fullPosition.y, m_fullPosition.z);
 		kmQuaternionRotationYawPitchRoll(&quat, -m_yaw, -m_pitch, -m_roll);
 		kmMat4RotationQuaternion(&rotation, &quat);
 		kmMat4Multiply(&translation,&translation,&rotation);
-		kmMat4Multiply(&m_matrixMV, &m_matrixMV, &translation);
+		kmMat4Multiply(&m_matrixM, &m_matrixM, &translation);
 		kmMat4Scaling(&scale, m_scale, m_scale, m_scale);
-		kmMat4Multiply(&m_matrixMV, &m_matrixMV, &scale);
+		kmMat4Multiply(&m_matrixM, &m_matrixM, &scale);
+
+		//model view matrix
+		kmMat4Multiply(&m_matrixMV, &(parent->get3DCamera()->getViewMatrix()), &m_matrixM);
 
 		//normal matrix
 		kmMat4Inverse(&m_matrixNormal, &m_matrixMV);
@@ -428,18 +416,6 @@ void Model::setupMatrices()
 		kmMat4Multiply(&m_matrixMVP, &matrixP, &m_matrixMV);
 
 		transformAABB(m_parser.m_aabb);
-
-		m_outOfCamera = parent->get3DCamera()->isObjectVisible(this,m_matrixMVP);
-
-		//debug
-		if (m_outOfCamera)
-		{
-			string s = "";
-		}
-		else
-		{
-			string s = "";
-		}
 	}
 
 	GLuint location;
@@ -496,8 +472,15 @@ void Model::draw3D()
 	glDisable(GL_CULL_FACE);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+	CC_INCREMENT_GL_DRAWS(1);
 	CHECK_GL_ERROR_DEBUG();	
 
+	if (m_drawOBB)
+		renderOOBB();
+}
+
+void Model::renderOOBB()
+{
 	CCGLProgram* program = CCShaderCache::sharedShaderCache()->programForKey(kCCShader_PositionColor);
 	program->setUniformsForBuiltins();
 	program->use();
@@ -505,22 +488,44 @@ void Model::draw3D()
 	GLint loc = program->getUniformLocationForName("CC_MVPMatrix");
 	getShaderProgram()->setUniformLocationWithMatrix4fv(loc, m_matrixMVP.mat, 1);
 	
-	CCPoint points[8];
+	ccVertex3F points[24];
 	
-	points[0].x = m_parser.m_aabb.min.x; points[0].y = m_parser.m_aabb.min.y; 
-	points[1].x = m_parser.m_aabb.min.x; points[1].y = m_parser.m_aabb.max.y; 
+	points[0].x = m_parser.m_aabb.min.x; points[0].y = m_parser.m_aabb.min.y; points[0].z = m_parser.m_aabb.max.z; 
+	points[1].x = m_parser.m_aabb.min.x; points[1].y = m_parser.m_aabb.max.y; points[1].z = m_parser.m_aabb.max.z;
+	points[2].x = m_parser.m_aabb.min.x; points[2].y = m_parser.m_aabb.max.y; points[2].z = m_parser.m_aabb.max.z;
+	points[3].x = m_parser.m_aabb.max.x; points[3].y = m_parser.m_aabb.max.y; points[3].z = m_parser.m_aabb.max.z;
+	points[4].x = m_parser.m_aabb.max.x; points[4].y = m_parser.m_aabb.max.y; points[4].z = m_parser.m_aabb.max.z;
+	points[5].x = m_parser.m_aabb.max.x; points[5].y = m_parser.m_aabb.min.y; points[5].z = m_parser.m_aabb.max.z;
+	points[6].x = m_parser.m_aabb.max.x; points[6].y = m_parser.m_aabb.min.y; points[6].z = m_parser.m_aabb.max.z;
+	points[7].x = m_parser.m_aabb.min.x; points[7].y = m_parser.m_aabb.min.y; points[7].z = m_parser.m_aabb.max.z;
+
+	points[8].x = m_parser.m_aabb.min.x; points[8].y = m_parser.m_aabb.min.y; points[8].z = m_parser.m_aabb.min.z; 
+	points[9].x = m_parser.m_aabb.min.x; points[9].y = m_parser.m_aabb.max.y; points[9].z = m_parser.m_aabb.min.z;
+	points[10].x = m_parser.m_aabb.min.x; points[10].y = m_parser.m_aabb.max.y; points[10].z = m_parser.m_aabb.min.z;
+	points[11].x = m_parser.m_aabb.max.x; points[11].y = m_parser.m_aabb.max.y; points[11].z = m_parser.m_aabb.min.z;
+	points[12].x = m_parser.m_aabb.max.x; points[12].y = m_parser.m_aabb.max.y; points[12].z = m_parser.m_aabb.min.z;
+	points[13].x = m_parser.m_aabb.max.x; points[13].y = m_parser.m_aabb.min.y; points[13].z = m_parser.m_aabb.min.z;
+	points[14].x = m_parser.m_aabb.max.x; points[14].y = m_parser.m_aabb.min.y; points[14].z = m_parser.m_aabb.min.z;
+	points[15].x = m_parser.m_aabb.min.x; points[15].y = m_parser.m_aabb.min.y; points[15].z = m_parser.m_aabb.min.z;
+
+	points[16].x = m_parser.m_aabb.min.x; points[16].y = m_parser.m_aabb.min.y; points[16].z = m_parser.m_aabb.min.z; 
+	points[17].x = m_parser.m_aabb.min.x; points[17].y = m_parser.m_aabb.min.y; points[17].z = m_parser.m_aabb.max.z;
+	points[18].x = m_parser.m_aabb.min.x; points[18].y = m_parser.m_aabb.max.y; points[18].z = m_parser.m_aabb.min.z;
+	points[19].x = m_parser.m_aabb.min.x; points[19].y = m_parser.m_aabb.max.y; points[19].z = m_parser.m_aabb.max.z;
 	
-	points[2].x = m_parser.m_aabb.min.x; points[2].y = m_parser.m_aabb.max.y; 
-	points[3].x = m_parser.m_aabb.max.x; points[3].y = m_parser.m_aabb.max.y; 
+	points[20].x = m_parser.m_aabb.max.x; points[20].y = m_parser.m_aabb.min.y; points[20].z = m_parser.m_aabb.min.z;
+	points[21].x = m_parser.m_aabb.max.x; points[21].y = m_parser.m_aabb.min.y; points[21].z = m_parser.m_aabb.max.z;
 	
-	points[4].x = m_parser.m_aabb.max.x; points[4].y = m_parser.m_aabb.max.y; 
-	points[5].x = m_parser.m_aabb.max.x; points[5].y = m_parser.m_aabb.min.y;
-	
-	points[6].x = m_parser.m_aabb.max.x; points[6].y = m_parser.m_aabb.min.y; 
-	points[7].x = m_parser.m_aabb.min.x; points[7].y = m_parser.m_aabb.min.y; 
-	
-	glVertexAttribPointer(kCCVertexAttrib_Position, 2, GL_FLOAT, GL_FALSE, 0, points);
- 	glDrawArrays(GL_LINES, 0, 8);
+	points[22].x = m_parser.m_aabb.max.x; points[22].y = m_parser.m_aabb.max.y; points[22].z = m_parser.m_aabb.min.z;
+	points[23].x = m_parser.m_aabb.max.x; points[23].y = m_parser.m_aabb.max.y; points[23].z = m_parser.m_aabb.max.z;
+
+	glVertexAttribPointer(kCCVertexAttrib_Position, 3, GL_FLOAT, GL_FALSE, 0, points);
+ 	glDrawArrays(GL_LINES, 0, 24);
+
+	//ccColor4F color = { 1.0f, 0.5f, 0.0f, 1.0f };
+	//ccDrawSolidRect(CCPoint(m_bbox.min.x,m_bbox.min.y),CCPoint(m_bbox.max.x, m_bbox.max.y),color);
+
+	CC_INCREMENT_GL_DRAWS(1);
 }
 
 void Model::setupMaterial(const ccVertex3F& diffuses, const ccVertex3F& speculars)
@@ -537,10 +542,29 @@ void Model::setupMaterial(const ccVertex3F& diffuses, const ccVertex3F& specular
 const ccVertex3F& Model::getCenter()
 { 
 	return get3DPosition();
-	//return m_parser.getCenter(); 
 }
 
 float Model::getRadius()
 { 
 	return m_parser.getRadius() * m_scale;
+}
+
+bool Model::isOutOfCamera(Frustum::Planes plane)
+{
+	Layer3D* parent = dynamic_cast<Layer3D*>(m_pParent);
+
+	if (parent == NULL)
+		return true;
+
+	return !(parent->get3DCamera()->isObjectVisible(this,m_matrixMVP,plane));
+}
+
+void Model::setDrawOBB(bool draw)
+{ 
+	m_drawOBB = draw;
+}
+
+void Model::renderLines(bool lines)
+{
+	m_lines = lines;
 }

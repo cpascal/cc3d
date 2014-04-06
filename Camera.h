@@ -20,17 +20,17 @@ namespace cocos3d
 			TOP,
 			LEFT,
 			RIGHT,
-			N_PLANES = 6
+			ALL_PLANES = 6
 		};
 		
 		Frustum(Camera* camera, kmMat4& mvp);
 		bool isPointInFrustum(kmVec3 &p);
 		bool isPointInFrustum(kmVec3 &p, Planes plane);
 		bool isBoxInFrustum(kmAABB& box);
-		bool isBoxInFrustumPerPoint(kmAABB& box, Planes plane = N_PLANES);
+		bool isBoxInFrustumPerPoint(kmAABB& box, Planes plane = ALL_PLANES);
 
 	private:
-		kmPlane m_planes[N_PLANES];
+		kmPlane m_planes[ALL_PLANES];
 		Camera* m_camera;
 	};
 
@@ -51,16 +51,17 @@ namespace cocos3d
 		void lookAt(const ccVertex3F& position);
 		void lookAt(const CCPoint& position);
 
+		const ccVertex3F& getLookAt();
+
 		void setFOV(float fov);
 		void setNear(float nearV);
 		void setFar(float farV);
 		void setNearFar(float nearV, float farV);
 		void setUp(const ccVertex3F& up);
 
-		bool isDirty(){ return m_dirty; }
-		void notDirty(){ m_dirty = false; }
+		bool isDirty();
+		void notDirty();
 
-		bool isObjectVisible(Node3D* node, kmMat4& mvp);
 		bool isObjectVisible(Node3D* node, kmMat4& mvp, Frustum::Planes plane);
 
 		const kmMat4& getProjectionMatrix();
@@ -73,7 +74,7 @@ namespace cocos3d
 		kmVec3 m_eye, m_center, m_up;
 		GLfloat m_fov, m_ratio, m_near, m_far;
 		CCPoint m_position2d;
-		ccVertex3F m_position3d;
+		ccVertex3F m_position3d, m_lookAt3d;
 
 		bool m_dirty;
 

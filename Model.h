@@ -45,8 +45,7 @@ namespace cocos3d
 									 const char* textureBuffer = NULL, 
 									 unsigned long size = 0);
 
-		void renderLines(bool lines){ m_lines = lines; }
-
+		
 		virtual void draw3D();
 
 		virtual const ccVertex3F& getCenter();
@@ -69,8 +68,9 @@ namespace cocos3d
 		virtual void setCascadeOpacityEnabled(bool cascadeOpacityEnabled){ CC_UNUSED_PARAM(cascadeOpacityEnabled); }
 		virtual void updateDisplayedOpacity(GLubyte opacity){ CC_UNUSED_PARAM(opacity); }
 
-		bool outOfCamera(){ return m_outOfCamera; }
-
+		bool isOutOfCamera(Frustum::Planes plane);
+		void setDrawOBB(bool draw);
+		void renderLines(bool lines);
 	protected:
 		void generateVBOs();
 		virtual void setupMatrices();
@@ -79,6 +79,7 @@ namespace cocos3d
 		void setupMaterial(const ccVertex3F& diffuse, const ccVertex3F& specular);
 
 		void transformAABB(const kmAABB& box);
+		void renderOOBB();
 
 		void clearLights();
 
@@ -102,10 +103,8 @@ namespace cocos3d
 			   m_matrixMVP,
 			   m_matrixNormal; 
 	private:
-		bool m_lines;
 		float m_opacity;
-		bool m_defaultLightUsed;
-		bool m_outOfCamera;
+		bool m_lines, m_drawOBB, m_defaultLightUsed;
 		string m_id;
 	};
 }
