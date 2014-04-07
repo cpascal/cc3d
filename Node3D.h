@@ -1,8 +1,6 @@
 #ifndef __NODE_3D_H__
 #define __NODE_3D_H__
 #include "cocos2d.h"
-#include "Light.h"
-#include <vector>
 
 using namespace cocos2d;
 
@@ -42,22 +40,15 @@ namespace cocos3d
 
 		virtual float getRadius(){ return 0; }
 		virtual const ccVertex3F& getCenter(){ return m_center; }
-		virtual const kmAABB& getBoundingBox(){ return m_bbox;}
-
-		virtual void addLight(Light* light){ CC_UNUSED_PARAM(light); }
-		virtual void removeLight(Light* light){ CC_UNUSED_PARAM(light); };
-		virtual void removeAllLights(){}
-		virtual const std::vector<Light*>& getLights(){ return m_lights; }
+		virtual const kmAABB& getBoundingBox(){ return m_bbox; }
 
 		virtual void draw();
 		virtual void draw3D(){}
-
 		
 	protected:
-		CCPoint m_position, m_tempPosition;
-		ccVertex3F m_fullPosition, m_tempFullPosition, m_center;
+		CCPoint m_position;
+		ccVertex3F m_fullPosition, m_center;
 		float m_yaw, m_pitch, m_roll, m_scale;
-		std::vector<Light*> m_lights;
 		bool m_dirty;
 		kmAABB m_bbox;
 	};

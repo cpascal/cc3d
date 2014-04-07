@@ -1,6 +1,7 @@
 #ifndef __LIGHT_H__
 #define __LIGHT_H__
 #include "cocos2d.h"
+#include "Node3D.h"
 
 using namespace cocos2d;
 
@@ -17,7 +18,7 @@ namespace cocos3d
 		static CCLightTo* create(float duration, ccVertex3F& ambience, ccVertex3F& diffuse, ccVertex3F& specular);
 	private:
 		ccVertex3F m_fromAmbience, m_fromDiffuse, m_fromSpecular, m_toAmbience, m_toDiffuse, m_toSpecular;
-	};
+	}; 
 
 	struct ccVertex4F
 	{
@@ -31,7 +32,7 @@ namespace cocos3d
 		float x,y,z,w;
 	};
 
-	class Light : public CCNode
+	class Light : public Node3D
 	{
 	public:
 		static ccVertex3F CC_VERTEX_3F(float x, float y, float z)
@@ -45,8 +46,6 @@ namespace cocos3d
 		virtual bool init();
 
 		void setEnabled(bool enabled){ m_enabled = enabled; }
-
-		void setPosition(const ccVertex3F& position);
 
 		void setAmbientDiffuseSpecularIntensity(const ccVertex3F& ambient, const ccVertex3F& diffuse, const ccVertex3F& specular, float intensity = 1.0f); 
 
@@ -62,7 +61,6 @@ namespace cocos3d
 		const ccVertex3F& getDiffuse(){ return m_diffuse; }
 		const ccVertex3F& getSpecular(){ return m_specular; }
 		const ccVertex3F& getDirection(){ return m_direction; }
-		const ccVertex3F& getLightPosition(){ return m_position; }
 		const float getIntensity(){ return m_intensity; }
 
 		bool isEnabled(){ return m_enabled; }
@@ -70,7 +68,6 @@ namespace cocos3d
 		void setParentDirty();
 
 	protected:
-		ccVertex3F m_position;
 		ccVertex3F m_ambient;
 		ccVertex3F m_diffuse;
 		ccVertex3F m_specular;

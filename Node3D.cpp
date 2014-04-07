@@ -2,9 +2,7 @@
 
 using namespace cocos3d;
 
-#define PARENT_LAYER_DELTA \
-int pDeltaX = 0.0f; \
-int pDeltaY = 0.0f; \
+#define PARENT_LAYER_DELTA() \
 if (getParent() != NULL) \
 {\
 	pDeltaX = getParent()->getPositionX();\
@@ -81,12 +79,15 @@ void Node3D::setRoll(const float roll)
 
 void Node3D::draw()
 {
-    getShaderProgram()->use();
+	if (getShaderProgram() != NULL)
+	{
+		getShaderProgram()->use();
 
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);
-    draw3D();
-    glDisable(GL_DEPTH_TEST);
+		glEnable(GL_DEPTH_TEST);
+		glDepthFunc(GL_LEQUAL);
+		draw3D();
+		glDisable(GL_DEPTH_TEST);
+	}
 
 	m_dirty = false;
 }
@@ -103,18 +104,13 @@ void Node3D::setPosition(const CCPoint &position)
 
 const CCPoint& Node3D::getPosition()
 {
-	m_tempPosition = m_position;
-	PARENT_LAYER_DELTA
-	m_tempPosition.x += pDeltaX;
-	m_tempPosition.y += pDeltaY;
-	return m_tempPosition;
+	return m_position;
 }
 
 void Node3D::getPosition(float* x, float* y)
 {
-	PARENT_LAYER_DELTA
-	*x = m_position.x + pDeltaX;
-	*y = m_position.y + pDeltaY;
+	*x = m_position.x;
+	*y = m_position.y;
 }
 
 void Node3D::setPositionX(float x)
@@ -127,8 +123,7 @@ void Node3D::setPositionX(float x)
 
 float Node3D::getPositionX(void)
 {
-	PARENT_LAYER_DELTA
-	return m_position.x + pDeltaX;
+	return m_position.x;
 }
 
 void Node3D::setPositionY(float y)
@@ -139,8 +134,7 @@ void Node3D::setPositionY(float y)
 
 float Node3D::getPositionY(void)
 {
-	PARENT_LAYER_DELTA
-	return m_position.y + pDeltaY;
+	return m_position.y;
 }
 
 void Node3D::setPosition(float x, float y, float z)
@@ -171,9 +165,5 @@ void Node3D::setPositionZ(float z)
 
 const ccVertex3F& Node3D::get3DPosition()
 {
-	PARENT_LAYER_DELTA
-	m_tempFullPosition = m_fullPosition;
-	m_tempFullPosition.x += pDeltaX;
-	m_tempFullPosition.y += pDeltaY;
-	return m_tempFullPosition;
+	return m_fullPosition;
 }

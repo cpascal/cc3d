@@ -1,7 +1,9 @@
 #include "Model.h"
+#include "Light.h"
 #include "Layer3D.h"
 #include "Camera.h"
 #include "shaders.h"
+#include <limits>
 
 using namespace cocos3d;
 
@@ -245,9 +247,9 @@ void Model::setupLights()
 				m_lightsDiffuses[i] = light->getDiffuse();
 				m_lightsIntensity[i] = light->getIntensity();
 
-				m_lightsPositions[i].x = light->getLightPosition().x * m_scale;
-				m_lightsPositions[i].y = light->getLightPosition().y * m_scale;
-				m_lightsPositions[i].z = light->getLightPosition().z * m_scale;
+				m_lightsPositions[i].x = light->get3DPosition().x * m_scale;
+				m_lightsPositions[i].y = light->get3DPosition().y * m_scale;
+				m_lightsPositions[i].z = light->get3DPosition().z * m_scale;
 
 				if (light->isEnabled())
 					m_lightsEnabled[i] = true;
@@ -385,9 +387,6 @@ void Model::setupMatrices()
 
 	if (m_dirty || parent->get3DCamera()->isDirty())
 	{
-		parent->get3DCamera()->notDirty();
-
-		const kmMat4 matrixP = parent->get3DCamera()->getProjectionMatrix();	
 		kmMat4 rotation;
 		kmMat4 translation;
 		kmMat4 scale; 
@@ -404,14 +403,16 @@ void Model::setupMatrices()
 		kmMat4Multiply(&m_matrixM, &m_matrixM, &translation);
 		kmMat4Scaling(&scale, m_scale, m_scale, m_scale);
 		kmMat4Multiply(&m_matrixM, &m_matrixM, &scale);
-
+	
+		const kmMat4 matrixP = parent->get3DCamera()->getProjectionMatrix();	
+		
 		//model view matrix
 		kmMat4Multiply(&m_matrixMV, &(parent->get3DCamera()->getViewMatrix()), &m_matrixM);
 
 		//normal matrix
 		kmMat4Inverse(&m_matrixNormal, &m_matrixMV);
 		kmMat4Transpose(&m_matrixNormal, &m_matrixNormal);
-
+	
 		//MVP matrix
 		kmMat4Multiply(&m_matrixMVP, &matrixP, &m_matrixMV);
 

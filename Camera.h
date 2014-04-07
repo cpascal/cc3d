@@ -34,7 +34,7 @@ namespace cocos3d
 		Camera* m_camera;
 	};
 
-	class Camera : public CCNode
+	class Camera : public Node3D
 	{
 	public:
 
@@ -42,17 +42,25 @@ namespace cocos3d
 
 		virtual bool init();
 
+		void setPosition(float x, float y);
 		void setPosition(const ccVertex3F& position);
 		void setPosition(const CCPoint& position);
-
 		const CCPoint& getPosition();
 		const ccVertex3F& get3DPosition();
+		void getPosition(float* x, float* y);
+		void  setPositionX(float x);
+		float getPositionX(void);
+		void  setPositionY(float y);
+		float getPositionY(void);
+		void setPosition(float x, float y, float z);
+		void setPositionZ(float z);
 
 		void lookAt(const ccVertex3F& position);
 		void lookAt(const CCPoint& position);
 
 		const ccVertex3F& getLookAt();
 
+		void setProjection(float fov, float ratio, float near, float far);
 		void setFOV(float fov);
 		void setNear(float nearV);
 		void setFar(float farV);
@@ -73,10 +81,9 @@ namespace cocos3d
 		kmMat4 m_projectionMatrix, m_viewMatrix;
 		kmVec3 m_eye, m_center, m_up;
 		GLfloat m_fov, m_ratio, m_near, m_far;
-		CCPoint m_position2d;
-		ccVertex3F m_position3d, m_lookAt3d;
+		ccVertex3F m_lookAt3d;
 
-		bool m_dirty;
+		bool m_projectionDirty, m_viewDirty;
 
 		friend class Frustum;
 	};

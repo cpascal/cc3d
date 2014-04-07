@@ -13,7 +13,7 @@ bool Camera::init()
 	m_ratio = (GLfloat)size.width/size.height;
 	m_near = 0.1f;
 	m_far = eyeZ*2;
-	m_dirty = true;
+	m_projectionDirty = m_viewDirty = true;
 	
 	recalculateProjection();
 
@@ -31,7 +31,7 @@ void Camera::setPosition(const ccVertex3F& position)
 	m_eye.y = position.y;
 	m_eye.z = position.z;
 
-	recalculateView();
+	m_viewDirty = true;
 }
 
 void Camera::setPosition(const CCPoint& position)
@@ -39,24 +39,80 @@ void Camera::setPosition(const CCPoint& position)
 	m_eye.x = position.x;
 	m_eye.y = position.y;
 
-	recalculateView();
+	m_viewDirty = true;
+}
+
+void Camera::setPosition(float x, float y)
+{
+	m_eye.x = x;
+	m_eye.y = y;
+
+	m_viewDirty = true;
+}
+
+void Camera::setPosition(float x, float y, float z)
+{
+	m_eye.x = x;
+	m_eye.y = y;
+	m_eye.z = z;
+
+	m_viewDirty = true;
+}
+
+void Camera::getPosition(float* x, float* y)
+{
+	CC_ASSERT(x != NULL && y != NULL);
+
+	*x = m_eye.x;
+	*y = m_eye.y;
+}
+		
+void Camera::setPositionX(float x)
+{
+	m_eye.x = x;
+
+	m_viewDirty = true;
+}
+
+float Camera::getPositionX(void)
+{
+	return m_eye.x;
+}
+
+void  Camera::setPositionY(float y)
+{
+	m_eye.y = y;
+
+	m_viewDirty = true;
+}
+
+float Camera::getPositionY(void)
+{
+	return m_eye.y;
+}
+
+void Camera::setPositionZ(float z)
+{
+	m_eye.z = z;
+
+	m_viewDirty = true;
 }
 
 const CCPoint& Camera::getPosition()
 {
-	m_position2d.x = m_eye.x;
-	m_position2d.y = m_eye.y;
+	m_position.x = m_eye.x;
+	m_position.y = m_eye.y;
 
-	return m_position2d;
+	return m_position;
 }
 
 const ccVertex3F& Camera::get3DPosition()
 {
-	m_position3d.x = m_eye.x;
-	m_position3d.y = m_eye.y;
-	m_position3d.z = m_eye.z;
+	m_fullPosition.x = m_eye.x;
+	m_fullPosition.y = m_eye.y;
+	m_fullPosition.z = m_eye.z;
 
-	return m_position3d;
+	return m_fullPosition;
 }
 
 void Camera::lookAt(const ccVertex3F& position)
@@ -65,7 +121,7 @@ void Camera::lookAt(const ccVertex3F& position)
 	m_center.y = position.y;
 	m_center.z = position.z;
 
-	recalculateView();
+	m_viewDirty = true;
 }
 
 void Camera::lookAt(const CCPoint& position)
@@ -73,7 +129,7 @@ void Camera::lookAt(const CCPoint& position)
 	m_center.x = position.x;
 	m_center.y = position.y;
 
-	recalculateView();
+	m_viewDirty = true;
 }
 
 const ccVertex3F& Camera::getLookAt()
@@ -91,16 +147,22 @@ void Camera::setUp(const ccVertex3F& up)
 	m_up.y = up.y;
 	m_up.z = up.z;
 
-	recalculateView();
+	m_viewDirty = true;
 }
 
 const kmMat4& Camera::getViewMatrix()
 {
+	if (m_viewDirty)
+		recalculateView();
+
 	return m_viewMatrix;
 }
 
 const kmMat4& Camera::getProjectionMatrix()
 {
+	if (m_projectionDirty)
+		recalculateProjection();
+
 	return m_projectionMatrix;
 }
 
@@ -111,7 +173,7 @@ void Camera::recalculateView()
 #endif
 	kmMat4LookAt(&m_viewMatrix,&m_eye,&m_center,&m_up);
 
-	m_dirty = true;
+	m_viewDirty = false;
 }
 
 void Camera::recalculateProjection()
@@ -127,28 +189,39 @@ void Camera::recalculateProjection()
 #if CC_TARGET_PLATFORM == CC_PLATFORM_WP8
 	kmMat4Multiply(&m_projectionMatrix, &i, &m_projectionMatrix);
 #endif
-	m_dirty = true;
+
+	m_projectionDirty = false;
+}
+
+void Camera::setProjection(float fov, float ratio, float nearV, float farV)
+{
+	m_fov = fov;
+	m_ratio = ratio;
+	m_near = nearV;
+	m_far = farV;
+
+	m_projectionDirty = true;
 }
 
 void Camera::setFOV(float fov)
 {
 	m_fov = fov;
 
-	recalculateProjection();
+	m_projectionDirty = true;
 }
 
 void Camera::setNear(float nearV)
 {
 	m_near = nearV;
 
-	recalculateProjection();
+	m_projectionDirty = true;
 }
 
 void Camera::setFar(float farV)
 {
 	m_far = farV;
 
-	recalculateProjection();
+	m_projectionDirty = true;
 }
 
 void Camera::setNearFar(float nearV, float farV)
@@ -156,7 +229,7 @@ void Camera::setNearFar(float nearV, float farV)
 	m_far = farV;
 	m_near = nearV;
 
-	recalculateProjection();
+	m_projectionDirty = true;
 }
 
 bool Camera::isObjectVisible(Node3D* node, kmMat4& mvp, Frustum::Planes plane)
@@ -170,12 +243,12 @@ bool Camera::isObjectVisible(Node3D* node, kmMat4& mvp, Frustum::Planes plane)
 
 bool Camera::isDirty()
 { 
-	return m_dirty;
+	return (m_projectionDirty || m_viewDirty);
 }
 
 void Camera::notDirty()
 {
-	m_dirty = false;
+	m_projectionDirty = m_viewDirty = false;
 }
 
 Frustum::Frustum(Camera* camera, kmMat4& mvp)

@@ -122,7 +122,7 @@ void Layer3D::setPosition(const CCPoint& position)
 		CCSize size = CCDirector::sharedDirector()->getWinSize();
 
 		//FIXME: We are fixing the camera at the middle!!!!!
-		ccVertex3F newPos = { size.width/2.0 - position.x, size.height/2.0 - position.y, camPos.z };
+		ccVertex3F newPos = { static_cast<GLfloat>(size.width/2.0 - position.x), static_cast<GLfloat>(size.height/2.0 - position.y), camPos.z };
 		ccVertex3F newLookAt = { newPos.x, newPos.y, lookAt.z };
 		
 		m_camera->setPosition(newPos);

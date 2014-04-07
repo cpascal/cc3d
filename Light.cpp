@@ -103,11 +103,6 @@ bool Light::init()
 	return CCNode::init();
 }
 
-void Light::setPosition(const ccVertex3F& position)
-{
-	m_position = position;
-}
-
 void Light::setAmbientDiffuseSpecularIntensity(const ccVertex3F& ambient, const ccVertex3F& diffuse, const ccVertex3F& specular, float intensity)
 {
 	m_ambient = ambient;
