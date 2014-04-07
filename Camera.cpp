@@ -254,15 +254,13 @@ void Camera::notDirty()
 Frustum::Frustum(Camera* camera, kmMat4& mvp)
 {
 	m_camera = camera;
-	kmMat4 _mvp;
-	kmMat4Multiply(&_mvp, &(m_camera->getProjectionMatrix()), &(m_camera->getViewMatrix()));
 
-	kmMat4ExtractPlane(&m_planes[NEARP],  &_mvp, KM_PLANE_NEAR);
-    kmMat4ExtractPlane(&m_planes[FARP],   &_mvp, KM_PLANE_FAR);
-    kmMat4ExtractPlane(&m_planes[LEFT],   &_mvp, KM_PLANE_LEFT);
-    kmMat4ExtractPlane(&m_planes[RIGHT],  &_mvp, KM_PLANE_RIGHT);
-    kmMat4ExtractPlane(&m_planes[BOTTOM], &_mvp, KM_PLANE_BOTTOM);
-    kmMat4ExtractPlane(&m_planes[TOP],    &_mvp, KM_PLANE_TOP);
+    kmMat4ExtractPlane(&m_planes[NEARP],  &mvp, KM_PLANE_NEAR);
+    kmMat4ExtractPlane(&m_planes[FARP],   &mvp, KM_PLANE_FAR);
+    kmMat4ExtractPlane(&m_planes[LEFT],   &mvp, KM_PLANE_LEFT);
+    kmMat4ExtractPlane(&m_planes[RIGHT],  &mvp, KM_PLANE_RIGHT);
+    kmMat4ExtractPlane(&m_planes[BOTTOM], &mvp, KM_PLANE_BOTTOM);
+    kmMat4ExtractPlane(&m_planes[TOP],    &mvp, KM_PLANE_TOP);
 }
 
 kmVec3 getPositivePoint(const kmAABB& box, const kmVec3& direction)

@@ -116,6 +116,9 @@ bool Model::initWithFiles(const string& id,
 
 	setShaderProgram(m_program);
 
+	generateVBOs();
+	initShaderLocations();
+
 	return pRet && Node3D::init();
 }
 
@@ -164,8 +167,9 @@ bool Model::initWithBuffers(const string& id,
     }
 
 	setShaderProgram(m_program);
-	
+
 	generateVBOs();
+	initShaderLocations();
 
 	return pRet && Node3D::init();
 }
@@ -188,6 +192,32 @@ void Model::generateVBOs()
 	m_parser.clearNormals();
 }
 
+void Model::initShaderLocations()
+{
+	//lights
+	m_shaderLocations["uLightEnabled"] = getShaderProgram()->getUniformLocationForName("uLightEnabled");
+	m_shaderLocations["uLightAmbience"] = getShaderProgram()->getUniformLocationForName("uLightAmbience");
+	m_shaderLocations["uLightDiffuse"] = getShaderProgram()->getUniformLocationForName("uLightDiffuse");
+	m_shaderLocations["uLightPosition"] = getShaderProgram()->getUniformLocationForName("uLightPosition");
+	m_shaderLocations["uLightIntensity"] = getShaderProgram()->getUniformLocationForName("uLightIntensity");
+
+	//matrices
+	m_shaderLocations["CC_MVPMatrix"] = getShaderProgram()->getUniformLocationForName("CC_MVPMatrix");
+	m_shaderLocations["CC_MVMatrix"] = getShaderProgram()->getUniformLocationForName("CC_MVMatrix");
+	m_shaderLocations["CC_NormalMatrix"] = getShaderProgram()->getUniformLocationForName("CC_NormalMatrix");
+
+	//options
+	m_shaderLocations["mode"] = getShaderProgram()->getUniformLocationForName("mode");
+	m_shaderLocations["alpha"] = getShaderProgram()->getUniformLocationForName("alpha");
+
+	//model material
+	m_shaderLocations["uDiffuse"] = getShaderProgram()->getUniformLocationForName("uDiffuse");
+	m_shaderLocations["uSpecular"] = getShaderProgram()->getUniformLocationForName("uSpecular");
+
+	//texture
+	m_shaderLocations["uTexture"] = glGetUniformLocation(getShaderProgram()->getProgram(), "uTexture");
+}
+
 void Model::setScale(float scale)
 {
 	m_scale = scale;
@@ -204,9 +234,9 @@ void Model::clearLights()
 
 void Model::setupLights()
 {
-	GLuint location;
-
 	Layer3D* parent = (Layer3D*)m_pParent;
+
+	bool lightsToSet = false;
 
 	if (parent->getLights().size() == 0 && !m_defaultLightUsed)
 	{
@@ -224,12 +254,16 @@ void Model::setupLights()
 
 		m_defaultLightUsed = true;
 
+		lightsToSet = true;
+
 		parent->cleanDirtyLights();
 	}
 	else
 	if (parent->lightsDirty())
 	{
 		m_defaultLightUsed = false;
+
+		lightsToSet	= true;
 
 		auto lights = parent->getLights();
 
@@ -259,28 +293,17 @@ void Model::setupLights()
 		}
  	}
 
-	location = getShaderProgram()->getUniformLocationForName("uLightEnabled");
-	if (location != -1)
-		glUniform1iv(location, MAX_LIGHTS, (GLint*)m_lightsEnabled);
-
-	location = getShaderProgram()->getUniformLocationForName("uLightAmbience");
-	if (location != -1)
-		glUniform3fv(location, MAX_LIGHTS, (GLfloat*)m_lightsAmbience);
-
-	location = getShaderProgram()->getUniformLocationForName("uLightDiffuse");
-	if (location != -1)
-		glUniform3fv(location, MAX_LIGHTS, (GLfloat*)m_lightsDiffuses);
-
-	location = getShaderProgram()->getUniformLocationForName("uLightPosition");
-	if (location != -1)
-		glUniform3fv(location, MAX_LIGHTS, (GLfloat*)m_lightsPositions);
-
-	location = getShaderProgram()->getUniformLocationForName("uLightIntensity");
-	if (location != -1)
-		glUniform1fv(location,  MAX_LIGHTS, (GLfloat*)m_lightsIntensity);
+	if (lightsToSet)
+	{
+		glUniform1iv(m_shaderLocations["uLightEnabled"], MAX_LIGHTS, (GLint*)m_lightsEnabled);
+		glUniform3fv(m_shaderLocations["uLightAmbience"], MAX_LIGHTS, (GLfloat*)m_lightsAmbience);
+		glUniform3fv(m_shaderLocations["uLightDiffuse"], MAX_LIGHTS, (GLfloat*)m_lightsDiffuses);
+		glUniform3fv(m_shaderLocations["uLightPosition"], MAX_LIGHTS, (GLfloat*)m_lightsPositions);
+		glUniform1fv(m_shaderLocations["uLightIntensity"],  MAX_LIGHTS, (GLfloat*)m_lightsIntensity);
+	}
 }
 
-void Model::setupVertices()
+void Model::setupAttribs()
 {
 	//setup texels or vertices for textures
 	if (m_parser.texels().size() > 0)
@@ -321,8 +344,6 @@ void Model::transformAABB(const kmAABB& box)
 	kmVec3Fill(&v[5],box.min.x,box.min.y, box.min.z);
 	kmVec3Fill(&v[6],box.max.x,box.min.y, box.min.z);
 	kmVec3Fill(&v[7],box.max.x,box.min.y, box.max.z);
-
-	Camera* camera = ((Layer3D*)getParent())->get3DCamera();
 
 	kmMat4 t;
 	kmMat4Translation(&t, size.width/2.0f, size.height/2.0f, CCDirector::sharedDirector()->getZEye());
@@ -382,8 +403,9 @@ void Model::transformAABB(const kmAABB& box)
 
 void Model::setupMatrices()
 {
-	CCSize size = CCDirector::sharedDirector()->getWinSize();
 	Layer3D* parent = dynamic_cast<Layer3D*>(m_pParent);
+
+	CC_ASSERT(parent != NULL);
 
 	if (m_dirty || parent->get3DCamera()->isDirty())
 	{
@@ -391,8 +413,6 @@ void Model::setupMatrices()
 		kmMat4 translation;
 		kmMat4 scale; 
 		kmQuaternion quat;
-
-		float eyeZ = size.height / 1.1566f;
 
 		//model matrix
 		kmMat4Identity(&m_matrixM);
@@ -419,51 +439,41 @@ void Model::setupMatrices()
 		transformAABB(m_parser.m_aabb);
 	}
 
-	GLuint location;
-
 	//pass matrices to shader
-	location = getShaderProgram()->getUniformLocationForName("CC_MVPMatrix");
-	getShaderProgram()->setUniformLocationWithMatrix4fv(location, m_matrixMVP.mat, 1);
+	glUniformMatrix4fv(m_shaderLocations["CC_MVPMatrix"], 1, 0, m_matrixMVP.mat);
+	glUniformMatrix4fv(m_shaderLocations["CC_MVMatrix"], 1, 0, m_matrixMV.mat);
+	glUniformMatrix4fv(m_shaderLocations["CC_NormalMatrix"], 1, 0, m_matrixNormal.mat);
+	glUniform1i(m_shaderLocations["mode"], 4);
+	glUniform1f(m_shaderLocations["alpha"], m_opacity);
+}
 
-	location = getShaderProgram()->getUniformLocationForName("CC_MVMatrix");
-	getShaderProgram()->setUniformLocationWithMatrix4fv(location, m_matrixMV.mat, 1);
-
-	location = getShaderProgram()->getUniformLocationForName("CC_NormalMatrix");
-	glUniformMatrix4fv(location, 1, 0, m_matrixNormal.mat);
-
-	location = getShaderProgram()->getUniformLocationForName("mode");
-	glUniform1i(location, 4);
-
-	location = getShaderProgram()->getUniformLocationForName("alpha");
-	glUniform1f(location, m_opacity);
+void Model::setupTextures()
+{
+	//Setup texture for simple Phong shader
+	if (m_dTexture != NULL)
+	{
+		ccGLBindTexture2D(m_dTexture->getName());
+		glUniform1i(m_shaderLocations["uTexture"], 1);
+	}
+	else
+	{
+		glUniform1i(m_shaderLocations["uTexture"], 0);
+	}
 }
 
 void Model::draw3D()
 {
-	CCSize size = CCDirector::sharedDirector()->getWinSize();
-
 	setupMatrices();
 	setupLights();
-
-	//Setup texture for simple Phong shader
-	GLint textLocation = glGetUniformLocation(getShaderProgram()->getProgram(), "uTexture");
-	if (m_dTexture != NULL)
-	{
-		ccGLBindTexture2D(m_dTexture->getName());
-		glUniform1i(textLocation, 1);
-	}
-	else
-	{
-		glUniform1i(textLocation, 0);	
-	}
+	setupTextures();
 
 	//render by material
 	glEnable(GL_CULL_FACE);
 	for (int i=0; i < (int)m_parser.materials().size(); ++i)
 	{
 		setupMaterial(m_parser.diffuses()[i],m_parser.speculars()[i]);		
-		setupVertices();
-		
+		setupAttribs();
+
 		if (m_lines)
 			glDrawArrays(GL_LINES, m_parser.firsts()[i], m_parser.counts()[i]);
 		else
@@ -485,9 +495,13 @@ void Model::renderOOBB()
 	CCGLProgram* program = CCShaderCache::sharedShaderCache()->programForKey(kCCShader_PositionColor);
 	program->setUniformsForBuiltins();
 	program->use();
+
+	static GLint loc = -1;
+
+	if (loc == -1)
+		loc = program->getUniformLocationForName("CC_MVPMatrix");
 	
-	GLint loc = program->getUniformLocationForName("CC_MVPMatrix");
-	getShaderProgram()->setUniformLocationWithMatrix4fv(loc, m_matrixMVP.mat, 1);
+	program->setUniformLocationWithMatrix4fv(loc, m_matrixMVP.mat, 1);
 	
 	ccVertex3F points[24];
 	
@@ -531,13 +545,8 @@ void Model::renderOOBB()
 
 void Model::setupMaterial(const ccVertex3F& diffuses, const ccVertex3F& speculars)
 {
-	GLint location;
-
-	location = getShaderProgram()->getUniformLocationForName("uDiffuse");
-	getShaderProgram()->setUniformLocationWith3f(location,diffuses.x,diffuses.y,diffuses.z);
-
-	location = getShaderProgram()->getUniformLocationForName("uSpecular");
-	getShaderProgram()->setUniformLocationWith3f(location,speculars.x,speculars.y,speculars.z);
+	glUniform3f(m_shaderLocations["uDiffuse"], diffuses.x,diffuses.y,diffuses.z);
+	glUniform3f(m_shaderLocations["uSpecular"], speculars.x, speculars.y, speculars.z);
 }
 
 const ccVertex3F& Model::getCenter()

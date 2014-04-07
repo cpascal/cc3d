@@ -73,9 +73,11 @@ namespace cocos3d
 		void renderLines(bool lines);
 	protected:
 		void generateVBOs();
+		void initShaderLocations();
 		virtual void setupMatrices();
-		virtual void setupVertices();
+		virtual void setupAttribs();
 		virtual void setupLights();
+		virtual void setupTextures();
 		void setupMaterial(const ccVertex3F& diffuse, const ccVertex3F& specular);
 
 		void transformAABB(const kmAABB& box);
@@ -101,7 +103,9 @@ namespace cocos3d
 		kmMat4 m_matrixM,
 			   m_matrixMV,
 			   m_matrixMVP,
-			   m_matrixNormal; 
+			   m_matrixNormal;
+
+		map<string,GLint> m_shaderLocations;
 	private:
 		float m_opacity;
 		bool m_lines, m_drawOBB, m_defaultLightUsed;
