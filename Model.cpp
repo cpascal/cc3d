@@ -21,6 +21,7 @@ Model::Model()
 , m_lightsEnabled(NULL)
 , m_defaultLightUsed(false)
 , m_drawOBB(false)
+, m_culling(true)
 {
 	m_lightsAmbience = new ccVertex3F[MAX_LIGHTS]();
 	m_lightsDiffuses = new ccVertex3F[MAX_LIGHTS]();
@@ -345,12 +346,9 @@ void Model::transformAABB(const kmAABB& box)
 	kmVec3Fill(&v[6],box.max.x,box.min.y, box.min.z);
 	kmVec3Fill(&v[7],box.max.x,box.min.y, box.max.z);
 
-	kmMat4 t;
-	kmMat4Translation(&t, size.width/2.0f, size.height/2.0f, CCDirector::sharedDirector()->getZEye());
 	for (int i = 0; i < 8 ; i++)
 	{
-		kmVec3TransformCoord(&v[i],&v[i],&m_matrixMV);
-		kmVec3TransformCoord(&v[i],&v[i],&t);
+		kmVec3TransformCoord(&v[i],&v[i],&m_matrixM);
 	}
 
 #if (CC_TARGET_PLATFORM != CC_PLATFORM_ANDROID)
@@ -464,6 +462,15 @@ void Model::setupTextures()
 void Model::draw3D()
 {
 	setupMatrices();
+
+	bool toRender = true;
+
+	if (m_culling)
+		toRender = ((Layer3D*)m_pParent)->get3DCamera()->isObjectVisible(this, Frustum::ALL_PLANES);
+
+	if (!toRender)
+		return;
+
 	setupLights();
 	setupTextures();
 
@@ -488,6 +495,11 @@ void Model::draw3D()
 
 	if (m_drawOBB)
 		renderOOBB();
+}
+
+void Model::setFrustumCulling(bool culling)
+{
+	m_culling = culling;
 }
 
 void Model::renderOOBB()
@@ -566,7 +578,7 @@ bool Model::isOutOfCamera(Frustum::Planes plane)
 	if (parent == NULL)
 		return true;
 
-	return !(parent->get3DCamera()->isObjectVisible(this,m_matrixMVP,plane));
+	return !(parent->get3DCamera()->isObjectVisible(this,plane));
 }
 
 void Model::setDrawOBB(bool draw)

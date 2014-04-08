@@ -68,6 +68,7 @@ namespace cocos3d
 		virtual void setCascadeOpacityEnabled(bool cascadeOpacityEnabled){ CC_UNUSED_PARAM(cascadeOpacityEnabled); }
 		virtual void updateDisplayedOpacity(GLubyte opacity){ CC_UNUSED_PARAM(opacity); }
 
+		void setFrustumCulling(bool culling);
 		bool isOutOfCamera(Frustum::Planes plane);
 		void setDrawOBB(bool draw);
 		void renderLines(bool lines);
@@ -106,6 +107,8 @@ namespace cocos3d
 			   m_matrixNormal;
 
 		map<string,GLint> m_shaderLocations;
+
+		bool m_culling;
 	private:
 		float m_opacity;
 		bool m_lines, m_drawOBB, m_defaultLightUsed;

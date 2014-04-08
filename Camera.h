@@ -23,7 +23,7 @@ namespace cocos3d
 			ALL_PLANES = 6
 		};
 		
-		Frustum(Camera* camera, kmMat4& mvp);
+		Frustum(Camera* camera);
 		bool isPointInFrustum(kmVec3 &p);
 		bool isPointInFrustum(kmVec3 &p, Planes plane);
 		bool isBoxInFrustum(kmAABB& box);
@@ -70,7 +70,7 @@ namespace cocos3d
 		bool isDirty();
 		void notDirty();
 
-		bool isObjectVisible(Node3D* node, kmMat4& mvp, Frustum::Planes plane);
+		bool isObjectVisible(Node3D* node, Frustum::Planes plane);
 
 		const kmMat4& getProjectionMatrix();
 		const kmMat4& getViewMatrix();
