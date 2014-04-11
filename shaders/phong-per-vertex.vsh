@@ -3,6 +3,7 @@ attribute vec3 a_position;
 attribute vec2 a_texCoord;
 attribute vec3 a_normal;
 
+uniform mat4 CC_MMatrix;
 uniform mat4 CC_NormalMatrix;
 uniform bool uTexture;
 uniform vec3 uDiffuse;
@@ -16,7 +17,11 @@ uniform vec3 uLightPosition[MAX_LIGHTS];
 uniform float alpha;
 uniform int mode;
 
+uniform mat4 uShadowProjectionMatrix;
+
 varying vec4 v_color;
+varying vec4 v_projectorCoord;
+varying float v_distance;
 
 void main()
 {																			
@@ -27,6 +32,8 @@ void main()
 	
 	highp vec3 normal = normalize(vec3(CC_NormalMatrix * vec4(a_normal, 0.0)));
 	vec4 vertPos4 = CC_MVMatrix * vec4(a_position, 1.0);
+
+	v_distance = vertPos4.z;
 
 	highp vec3 frontColor = vec3(0.0);
 
@@ -62,6 +69,8 @@ void main()
 	}
 	
 	v_color = vec4(frontColor,alpha);
+
+	v_projectorCoord = uShadowProjectionMatrix * (CC_MMatrix * vec4(a_position, 1.0));
 
 	gl_Position = CC_MVPMatrix * vec4(a_position, 1.0);
 }

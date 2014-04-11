@@ -3,6 +3,7 @@
 #include "Layer3D.h"
 #include "Camera.h"
 #include "shaders.h"
+#include "Scene3D.h"
 #include <limits>
 
 using namespace cocos3d;
@@ -22,6 +23,7 @@ Model::Model()
 , m_defaultLightUsed(false)
 , m_drawOBB(false)
 , m_culling(true)
+, m_shadowMapSet(false)
 {
 	m_lightsAmbience = new ccVertex3F[MAX_LIGHTS]();
 	m_lightsDiffuses = new ccVertex3F[MAX_LIGHTS]();
@@ -195,28 +197,42 @@ void Model::generateVBOs()
 
 void Model::initShaderLocations()
 {
+#define SETUP_LOCATION(name) m_shaderLocations[name] = getShaderProgram()->getUniformLocationForName(name);
+
 	//lights
-	m_shaderLocations["uLightEnabled"] = getShaderProgram()->getUniformLocationForName("uLightEnabled");
-	m_shaderLocations["uLightAmbience"] = getShaderProgram()->getUniformLocationForName("uLightAmbience");
-	m_shaderLocations["uLightDiffuse"] = getShaderProgram()->getUniformLocationForName("uLightDiffuse");
-	m_shaderLocations["uLightPosition"] = getShaderProgram()->getUniformLocationForName("uLightPosition");
-	m_shaderLocations["uLightIntensity"] = getShaderProgram()->getUniformLocationForName("uLightIntensity");
+	SETUP_LOCATION("uLightEnabled");
+	SETUP_LOCATION("uLightAmbience");
+	SETUP_LOCATION("uLightDiffuse");
+	SETUP_LOCATION("uLightPosition");
+	SETUP_LOCATION("uLightIntensity");
 
 	//matrices
-	m_shaderLocations["CC_MVPMatrix"] = getShaderProgram()->getUniformLocationForName("CC_MVPMatrix");
-	m_shaderLocations["CC_MVMatrix"] = getShaderProgram()->getUniformLocationForName("CC_MVMatrix");
-	m_shaderLocations["CC_NormalMatrix"] = getShaderProgram()->getUniformLocationForName("CC_NormalMatrix");
+	SETUP_LOCATION("CC_MVPMatrix");
+	SETUP_LOCATION("CC_MVMatrix");
+	SETUP_LOCATION("CC_MMatrix");
+	SETUP_LOCATION("CC_NormalMatrix");
+	SETUP_LOCATION("uShadowProjectionMatrix");
 
 	//options
-	m_shaderLocations["mode"] = getShaderProgram()->getUniformLocationForName("mode");
-	m_shaderLocations["alpha"] = getShaderProgram()->getUniformLocationForName("alpha");
+	SETUP_LOCATION("mode");
+	SETUP_LOCATION("alpha");
 
 	//model material
-	m_shaderLocations["uDiffuse"] = getShaderProgram()->getUniformLocationForName("uDiffuse");
-	m_shaderLocations["uSpecular"] = getShaderProgram()->getUniformLocationForName("uSpecular");
+	SETUP_LOCATION("uDiffuse");
+	SETUP_LOCATION("uSpecular");
 
 	//texture
-	m_shaderLocations["uTexture"] = glGetUniformLocation(getShaderProgram()->getProgram(), "uTexture");
+	SETUP_LOCATION("uTexture");
+	SETUP_LOCATION("uShadowMap");
+	SETUP_LOCATION("uShadowMapEnabled");
+	
+	unsigned int textureId = 0;
+
+	if (m_dTexture != NULL)
+		glUniform1i(m_shaderLocations["uTexture"], textureId++);
+
+	glUniform1i(m_shaderLocations["uShadowMap"], textureId);
+	glUniform1i(m_shaderLocations["uShadowMapEnabled"], (GLint)false);
 }
 
 void Model::setScale(float scale)
@@ -440,28 +456,79 @@ void Model::setupMatrices()
 	//pass matrices to shader
 	glUniformMatrix4fv(m_shaderLocations["CC_MVPMatrix"], 1, 0, m_matrixMVP.mat);
 	glUniformMatrix4fv(m_shaderLocations["CC_MVMatrix"], 1, 0, m_matrixMV.mat);
+	glUniformMatrix4fv(m_shaderLocations["CC_MMatrix"], 1, 0, m_matrixM.mat);
 	glUniformMatrix4fv(m_shaderLocations["CC_NormalMatrix"], 1, 0, m_matrixNormal.mat);
 	glUniform1i(m_shaderLocations["mode"], 4);
 	glUniform1f(m_shaderLocations["alpha"], m_opacity);
+
+}
+
+void Model::setupShadow()
+{
+	kmMat4 shadowProjectionMatrix;
+
+	if (!m_shadowMapSet)
+	{
+		kmMat4Identity(&shadowProjectionMatrix);
+	}
+	else
+	{
+		Layer3D* parent = dynamic_cast<Layer3D*>(m_pParent);
+
+		CC_ASSERT(parent != NULL);
+
+		kmMat4 tmp,projection,shadowView;
+
+		kmMat4Identity(&shadowProjectionMatrix);
+		kmMat4Translation(&shadowProjectionMatrix, 0.5f, 0.5f, 0.5f);
+		kmMat4Scaling(&shadowProjectionMatrix, 0.5f, 0.5f, 0.5f);
+
+		kmVec3 eye = parent->get3DCamera()->m_eye;
+		kmVec3 center = parent->get3DCamera()->m_center;
+		kmVec3 up = { 0, 1, 0 };
+
+		eye.x = 0;
+		center.x = 66.0f;
+		eye.y = eye.y - (CCDirector::sharedDirector()->getWinSize().height/2.0f);
+		center.y = center.y - (CCDirector::sharedDirector()->getWinSize().height/2.0f + CCDirector::sharedDirector()->getWinSize().height*0.08f);
+
+		projection = parent->get3DCamera()->getProjectionMatrix();
+		kmMat4LookAt(&shadowView, &eye, &center, &up);
+
+		kmMat4Multiply(&shadowProjectionMatrix, &shadowProjectionMatrix, kmMat4Multiply(&tmp, &projection, &shadowView));
+	}
+
+	glUniformMatrix4fv(m_shaderLocations["uShadowProjectionMatrix"], 1, 0, shadowProjectionMatrix.mat);
 }
 
 void Model::setupTextures()
 {
+	unsigned int textureId = 0;
+
 	//Setup texture for simple Phong shader
 	if (m_dTexture != NULL)
 	{
-		ccGLBindTexture2D(m_dTexture->getName());
-		glUniform1i(m_shaderLocations["uTexture"], 1);
+		glBindTexture(GL_TEXTURE_2D, m_dTexture->getName());
+		glActiveTexture(GL_TEXTURE0 + textureId);
+		glUniform1i(m_shaderLocations["uTexture"], textureId++);
 	}
-	else
+
+	Scene3D* scene = (Scene3D*)m_pParent->getParent();
+	CCTexture2D* shadowMap = scene->getCache()->getTexture("shadow_map");
+
+	if (shadowMap != NULL)
 	{
-		glUniform1i(m_shaderLocations["uTexture"], 0);
+		glUniform1i(m_shaderLocations["uShadowMapEnabled"], (GLint)true);
+		glBindTexture(GL_TEXTURE_2D, shadowMap->getName());
+		glActiveTexture(GL_TEXTURE0 + textureId);
+		m_shadowMapSet = true;
 	}
 }
 
 void Model::draw3D()
 {
 	setupMatrices();
+	setupShadow();
 
 	bool toRender = true;
 
@@ -476,6 +543,7 @@ void Model::draw3D()
 
 	//render by material
 	glEnable(GL_CULL_FACE);
+	glCullFace(GL_BACK);
 	for (int i=0; i < (int)m_parser.materials().size(); ++i)
 	{
 		setupMaterial(m_parser.diffuses()[i],m_parser.speculars()[i]);		
@@ -485,12 +553,13 @@ void Model::draw3D()
 			glDrawArrays(GL_LINES, m_parser.firsts()[i], m_parser.counts()[i]);
 		else
 			glDrawArrays(GL_TRIANGLES, m_parser.firsts()[i], m_parser.counts()[i]);
+
+		CC_INCREMENT_GL_DRAWS(1);
     }
 
 	glDisable(GL_CULL_FACE);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
-	CC_INCREMENT_GL_DRAWS(1);
 	CHECK_GL_ERROR_DEBUG();	
 
 	if (m_drawOBB)

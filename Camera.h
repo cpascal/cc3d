@@ -86,6 +86,7 @@ namespace cocos3d
 		bool m_projectionDirty, m_viewDirty;
 
 		friend class Frustum;
+		friend class Model;
 	};
 }
 #endif

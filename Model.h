@@ -79,6 +79,7 @@ namespace cocos3d
 		virtual void setupAttribs();
 		virtual void setupLights();
 		virtual void setupTextures();
+		virtual void setupShadow();
 		void setupMaterial(const ccVertex3F& diffuse, const ccVertex3F& specular);
 
 		void transformAABB(const kmAABB& box);
@@ -108,7 +109,7 @@ namespace cocos3d
 
 		map<string,GLint> m_shaderLocations;
 
-		bool m_culling;
+		bool m_culling, m_shadowMapSet;
 	private:
 		float m_opacity;
 		bool m_lines, m_drawOBB, m_defaultLightUsed;
