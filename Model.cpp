@@ -21,6 +21,7 @@ Model::Model()
 , m_lightsIntensity(NULL)
 , m_lightsEnabled(NULL)
 , m_defaultLightUsed(false)
+, m_lightsToSet(false)
 , m_drawOBB(false)
 , m_culling(true)
 , m_shadowMapSet(false)
@@ -122,6 +123,11 @@ bool Model::initWithFiles(const string& id,
 	generateVBOs();
 	initShaderLocations();
 
+	CCNotificationCenter::sharedNotificationCenter()->addObserver(this,
+                                                                  callfuncO_selector(Model::listenBackToForeground),
+                                                                  EVENT_COME_TO_FOREGROUND,
+                                                                  NULL);
+
 	return pRet && Node3D::init();
 }
 
@@ -143,11 +149,11 @@ bool Model::initWithBuffers(const string& id,
 		if (m_dTexture == NULL)
 		{
 		
-			CCImage image;
-			bool res = image.initWithImageData((void *)textureBuffer, size);//, CCImage::EImageFormat::kFmtPng,0,0,8);
+			CCImage* image = new CCImage();
+			bool res = image->initWithImageData((void *)textureBuffer, size);//, CCImage::EImageFormat::kFmtPng,0,0,8);
 
 			if (res == true)
-				m_dTexture = CCTextureCache::sharedTextureCache()->addUIImage(&image,textureName.c_str());
+				m_dTexture = CCTextureCache::sharedTextureCache()->addUIImage(image,textureName.c_str());
 		}
 	}
     else
@@ -173,8 +179,25 @@ bool Model::initWithBuffers(const string& id,
 
 	generateVBOs();
 	initShaderLocations();
-
+#if CC_ENABLE_CACHE_TEXTURE_DATA
+	CCNotificationCenter::sharedNotificationCenter()->addObserver(this,
+                                                                  callfuncO_selector(Model::listenBackToForeground),
+                                                                  EVENT_COME_TO_FOREGROUND,
+                                                                  NULL);
+#endif
 	return pRet && Node3D::init();
+}
+
+void Model::listenBackToForeground(CCObject *obj)
+{
+	m_program = new CCGLProgram();
+	MESH_INIT_PHONG(m_program);
+	CCShaderCache::sharedShaderCache()->addProgram(m_program,PHONG_SHADER_KEY);
+	setShaderProgram(m_program);
+	generateVBOs();
+	initShaderLocations();
+
+	m_lightsToSet = true;
 }
 
 void Model::generateVBOs()
@@ -191,8 +214,10 @@ void Model::generateVBOs()
 	glBufferData(GL_ARRAY_BUFFER, m_parser.normals().size()*sizeof(ccVertex3F), &(m_parser.normals()[0]), GL_STATIC_DRAW);
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
+#if !CC_ENABLE_CACHE_TEXTURE_DATA
 	m_parser.clearPositions();
 	m_parser.clearNormals();
+#endif
 }
 
 void Model::initShaderLocations()
@@ -210,6 +235,7 @@ void Model::initShaderLocations()
 	SETUP_LOCATION("CC_MVPMatrix");
 	SETUP_LOCATION("CC_MVMatrix");
 	SETUP_LOCATION("CC_MMatrix");
+	SETUP_LOCATION("CC_VMatrix");
 	SETUP_LOCATION("CC_NormalMatrix");
 	SETUP_LOCATION("uShadowProjectionMatrix");
 
@@ -253,15 +279,13 @@ void Model::setupLights()
 {
 	Layer3D* parent = (Layer3D*)m_pParent;
 
-	bool lightsToSet = false;
-
 	if (parent->getLights().size() == 0 && !m_defaultLightUsed)
 	{
 		clearLights();
 
 		ccVertex3F ambient = { 0, 0, 0};
 		ccVertex3F diffuse = { 1, 1, 1};
-		ccVertex3F position = { 2400 , 852, 736 * 2 };
+		ccVertex3F position = { -100 , 852, 736 * 2 };
 
 		m_lightsAmbience[0] = ambient;
 		m_lightsDiffuses[0] = diffuse;
@@ -271,7 +295,7 @@ void Model::setupLights()
 
 		m_defaultLightUsed = true;
 
-		lightsToSet = true;
+		m_lightsToSet = true;
 
 		parent->cleanDirtyLights();
 	}
@@ -280,7 +304,7 @@ void Model::setupLights()
 	{
 		m_defaultLightUsed = false;
 
-		lightsToSet	= true;
+		m_lightsToSet = true;
 
 		auto lights = parent->getLights();
 
@@ -310,7 +334,7 @@ void Model::setupLights()
 		}
  	}
 
-	if (lightsToSet)
+	if (m_lightsToSet)
 	{
 		glUniform1iv(m_shaderLocations["uLightEnabled"], MAX_LIGHTS, (GLint*)m_lightsEnabled);
 		glUniform3fv(m_shaderLocations["uLightAmbience"], MAX_LIGHTS, (GLfloat*)m_lightsAmbience);
@@ -318,6 +342,8 @@ void Model::setupLights()
 		glUniform3fv(m_shaderLocations["uLightPosition"], MAX_LIGHTS, (GLfloat*)m_lightsPositions);
 		glUniform1fv(m_shaderLocations["uLightIntensity"],  MAX_LIGHTS, (GLfloat*)m_lightsIntensity);
 	}
+
+	m_lightsToSet = false;
 }
 
 void Model::setupAttribs()
@@ -444,7 +470,7 @@ void Model::setupMatrices()
 		kmMat4Multiply(&m_matrixMV, &(parent->get3DCamera()->getViewMatrix()), &m_matrixM);
 
 		//normal matrix
-		kmMat4Inverse(&m_matrixNormal, &m_matrixMV);
+		kmMat4Inverse(&m_matrixNormal, &m_matrixM);
 		kmMat4Transpose(&m_matrixNormal, &m_matrixNormal);
 	
 		//MVP matrix
@@ -457,6 +483,7 @@ void Model::setupMatrices()
 	glUniformMatrix4fv(m_shaderLocations["CC_MVPMatrix"], 1, 0, m_matrixMVP.mat);
 	glUniformMatrix4fv(m_shaderLocations["CC_MVMatrix"], 1, 0, m_matrixMV.mat);
 	glUniformMatrix4fv(m_shaderLocations["CC_MMatrix"], 1, 0, m_matrixM.mat);
+	glUniformMatrix4fv(m_shaderLocations["CC_VMatrix"], 1, 0, parent->get3DCamera()->getViewMatrix().mat);
 	glUniformMatrix4fv(m_shaderLocations["CC_NormalMatrix"], 1, 0, m_matrixNormal.mat);
 	glUniform1i(m_shaderLocations["mode"], 4);
 	glUniform1f(m_shaderLocations["alpha"], m_opacity);
@@ -488,7 +515,7 @@ void Model::setupShadow()
 		kmVec3 up = { 0, 1, 0 };
 
 		eye.x = 0;
-		center.x = 66.0f;
+		center.x = 0.13f*CCDirector::sharedDirector()->getWinSize().width;
 		eye.y = eye.y - (CCDirector::sharedDirector()->getWinSize().height/2.0f);
 		center.y = center.y - (CCDirector::sharedDirector()->getWinSize().height/2.0f + CCDirector::sharedDirector()->getWinSize().height*0.08f);
 
@@ -658,4 +685,97 @@ void Model::setDrawOBB(bool draw)
 void Model::renderLines(bool lines)
 {
 	m_lines = lines;
+}
+
+
+//TODO: Move to an actions header/cpp
+
+SpinBy* SpinBy::create(float fDuration, float fDeltaAngle)
+{
+    SpinBy *pRotateBy = new SpinBy();
+    pRotateBy->initWithDuration(fDuration, fDeltaAngle);
+    pRotateBy->autorelease();
+
+    return pRotateBy;
+}
+
+bool SpinBy::initWithDuration(float fDuration, float fDeltaAngle)
+{
+    if (CCActionInterval::initWithDuration(fDuration))
+    {
+        m_fAngleX = m_fAngleY = fDeltaAngle;
+        return true;
+    }
+
+    return false;
+}
+
+SpinBy* SpinBy::create(float fDuration, float fDeltaAngleX, float fDeltaAngleY, float fDeltaAngleZ)
+{
+    SpinBy *pRotateBy = new SpinBy();
+    pRotateBy->initWithDuration(fDuration, fDeltaAngleX, fDeltaAngleY, fDeltaAngleZ);
+    pRotateBy->autorelease();
+    
+    return pRotateBy;
+}
+
+bool SpinBy::initWithDuration(float fDuration, float fDeltaAngleX, float fDeltaAngleY, float fDeltaAngleZ)
+{
+    if (CCActionInterval::initWithDuration(fDuration))
+    {
+        m_fAngleX = fDeltaAngleX;
+        m_fAngleY = fDeltaAngleY;
+        return true;
+    }
+    
+    return false;
+}
+
+CCObject* SpinBy::copyWithZone(CCZone *pZone)
+{
+    CCZone* pNewZone = NULL;
+    SpinBy* pCopy = NULL;
+    if(pZone && pZone->m_pCopyObject) 
+    {
+        //in case of being called at sub class
+        pCopy = (SpinBy*)(pZone->m_pCopyObject);
+    }
+    else
+    {
+        pCopy = new SpinBy();
+        pZone = pNewZone = new CCZone(pCopy);
+    }
+
+    CCActionInterval::copyWithZone(pZone);
+
+    pCopy->initWithDuration(m_fDuration, m_fAngleX, m_fAngleY, m_fAngleZ);
+
+    CC_SAFE_DELETE(pNewZone);
+    return pCopy;
+}
+
+void SpinBy::startWithTarget(CCNode *pTarget)
+{
+    CCActionInterval::startWithTarget(pTarget);
+	Model* model = (Model*)m_pTarget;
+    m_fStartAngleX = model->getYaw();
+    m_fStartAngleY = model->getRoll();
+	m_fStartAngleZ = model->getPitch();
+}
+
+void SpinBy::update(float time)
+{
+    // XXX: shall I add % 360
+    if (m_pTarget)
+    {
+		Model* model = (Model*)m_pTarget;
+        model->setYaw(m_fStartAngleX + m_fAngleX * time);
+        //model->setRoll(m_fStartAngleY + m_fAngleY * time);
+		//model->setPitch(m_fStartAngleZ + m_fAngleZ * time);
+    }
+}
+
+CCActionInterval* SpinBy::reverse(void)
+{
+    return SpinBy::create(m_fDuration, -m_fAngleX, -m_fAngleY, -m_fAngleZ);
 }

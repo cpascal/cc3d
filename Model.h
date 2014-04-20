@@ -7,6 +7,33 @@
 
 namespace cocos3d
 {
+	class SpinBy : public CCActionInterval
+	{
+	public:
+		/** creates the action */
+		static SpinBy* create(float fDuration, float fDeltaAngle);
+		/** initializes the action */
+		bool initWithDuration(float fDuration, float fDeltaAngle);
+    
+		static SpinBy* create(float fDuration, float fDeltaAngleX, float fDeltaAngleY, float fDeltaAngleZ);
+		bool initWithDuration(float fDuration, float fDeltaAngleX, float fDeltaAngleY, float fDeltaAngleZ);
+		/**
+		 *  @js NA
+		 *  @lua NA
+		 */
+		virtual CCObject* copyWithZone(CCZone* pZone);
+		virtual void startWithTarget(CCNode *pTarget);
+		virtual void update(float time);
+		virtual CCActionInterval* reverse(void);
+    
+	protected:
+		float m_fAngleX;
+		float m_fStartAngleX;
+		float m_fAngleY;
+		float m_fStartAngleY;
+		float m_fAngleZ;
+		float m_fStartAngleZ;
+	};
 
 	class Model : public Node3D, public CCRGBAProtocol
 	{
@@ -72,6 +99,10 @@ namespace cocos3d
 		bool isOutOfCamera(Frustum::Planes plane);
 		void setDrawOBB(bool draw);
 		void renderLines(bool lines);
+
+		void listenBackToForeground(CCObject *obj);
+
+		const string& getId(){ return m_id; }
 	protected:
 		void generateVBOs();
 		void initShaderLocations();
@@ -112,7 +143,7 @@ namespace cocos3d
 		bool m_culling, m_shadowMapSet;
 	private:
 		float m_opacity;
-		bool m_lines, m_drawOBB, m_defaultLightUsed;
+		bool m_lines, m_drawOBB, m_defaultLightUsed, m_lightsToSet;
 		string m_id;
 	};
 }

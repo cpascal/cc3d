@@ -14,6 +14,11 @@ RenderCache::~RenderCache()
 
 void RenderCache::addTexture(const string& key, CCTexture2D* texture)
 {
+	auto find = m_textures.find(key);
+
+	if (find != m_textures.end())
+		texture->release();
+
 	m_textures[key] = texture;
 	texture->retain();
 }
