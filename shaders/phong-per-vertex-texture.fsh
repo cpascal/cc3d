@@ -1,6 +1,7 @@
 precision mediump float; 
 varying vec4 v_color;
 
+uniform sampler2D uTexture;
 uniform sampler2D uShadowMap;
 uniform bool uShadowMapEnabled;
 
@@ -31,5 +32,5 @@ void main()
     projTexColor = vec4(1.0);
   }
 
-  gl_FragColor = v_color * projTexColor;
+  gl_FragColor = v_color * projTexColor * texture2D(uTexture, v_texCoord);
 }

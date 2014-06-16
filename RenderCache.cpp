@@ -10,6 +10,8 @@ RenderCache::~RenderCache()
 	{
 		iter->second->release();
 	}
+    
+    m_textures.clear();
 }
 
 void RenderCache::addTexture(const string& key, CCTexture2D* texture)

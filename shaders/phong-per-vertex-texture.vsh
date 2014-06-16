@@ -1,5 +1,6 @@
 #define MAX_LIGHTS 4
 attribute vec3 a_position;
+attribute vec2 a_texCoord;
 attribute vec3 a_normal;
 
 uniform mat4 CC_MMatrix;
@@ -20,6 +21,7 @@ uniform mat4 uShadowProjectionMatrix;
 
 varying vec4 v_color;
 varying vec4 v_projectorCoord;
+varying vec2 v_texCoord;
 varying float v_distance;
 
 void main()
@@ -68,6 +70,8 @@ void main()
 	}
 
 	v_color = vec4(frontColor,alpha);
+
+	v_texCoord = a_texCoord;
 
 	v_projectorCoord = uShadowProjectionMatrix * (CC_MMatrix * vec4(a_position, 1.0));
 

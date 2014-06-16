@@ -1,9 +1,11 @@
 #ifndef __MESH_H__
 #define __MESH_H__
-#include "MTLParser.h"
+#include "MeshParser.h"
 #include <vector>
 #include "Node3D.h"
 #include "Camera.h"
+
+using namespace std;
 
 namespace cocos3d
 {
@@ -35,47 +37,61 @@ namespace cocos3d
 		float m_fStartAngleZ;
 	};
 
+	class Light;
+
 	class Model : public Node3D, public CCRGBAProtocol
 	{
 	public:
 
-		Model();
-		~Model();
+		enum ShineMode
+		{
+			SHINE_SPECULAR = 2,
+			SHINE_LAMBERTIAN = 3,
+			NO_SHINE = 4
+		};
 
-		static Model* createWithFiles(const string& id,
-									  const string& objFile, 
-									  const string& mtlFile, 
+		enum TexturePosition
+		{
+			DEFAULT_TEXTURE = -1,
+			TEXTURE_0 = 0
+		};
+
+		virtual ~Model();
+
+		static Model* createWithFiles(const std::string& id,
+									  const std::string& objFile, 
+									  const std::string& mtlFile, 
 									  float scale = 1.0f, 
-									  const string& texture = "");
+									  const std::string& texture = "");
 
-		static Model* createWithBuffers(const string& id,
-										const string& obj, 
-										const string& mtl, 
+		static Model* createWithBuffers(const std::string& id,
+										const std::string& obj, 
+										const std::string& mtl, 
 										float scale = 1.0f,
-										const string& textureName = "", 
+										const std::string& textureName = "", 
 										const char* textureBuffer = NULL, 
 										unsigned long size = 0);
 
 		virtual void setScale(float scale);
 
-		virtual bool initWithFiles(const string& id,
-								   const string& objFile, 
-								   const string& mtlFile, 
+		virtual bool initWithFiles(const std::string& id,
+								   const std::string& objFile, 
+								   const std::string& mtlFile, 
 								   float scale = 1.0f, 
 								   const string& texture = "");
 
-		virtual bool initWithBuffers(const string& id,
-									 const string& obj,
-									 const string& mtl, 
+		virtual bool initWithBuffers(const std::string& id,
+									 const std::string& obj,
+									 const std::string& mtl, 
 									 float scale = 1.0f, 
-									 const string& textureName = "", 
+									 const std::string& textureName = "", 
 									 const char* textureBuffer = NULL, 
 									 unsigned long size = 0);
 
 		
 		virtual void draw3D();
 
-		virtual const ccVertex3F& getCenter();
+		virtual const Vec3& getCenter();
 		virtual float getRadius();
 
 		//CCRGBA protocol
@@ -95,6 +111,18 @@ namespace cocos3d
 		virtual void setCascadeOpacityEnabled(bool cascadeOpacityEnabled){ CC_UNUSED_PARAM(cascadeOpacityEnabled); }
 		virtual void updateDisplayedOpacity(GLubyte opacity){ CC_UNUSED_PARAM(opacity); }
 
+		virtual void setShineMode(ShineMode, float exponent);
+
+		void backFaceCulling(bool culling);
+
+		virtual void addCustomLights(const std::list<Light*>& lights);
+		
+		void addAnimationTextures(const std::vector<CCTexture2D*>& textures, float time = 0);
+		void setCurrentTexture(int position);
+		void nextTexture();
+
+		void setTextureToAlpha();
+
 		void setFrustumCulling(bool culling);
 		bool isOutOfCamera(Frustum::Planes plane);
 		void setDrawOBB(bool draw);
@@ -102,16 +130,22 @@ namespace cocos3d
 
 		void listenBackToForeground(CCObject *obj);
 
+		virtual void setId(const std::string& id){}
 		const string& getId(){ return m_id; }
 	protected:
+		Model();
+
+		void fillVectors(MeshParser* parser);
 		void generateVBOs();
 		void initShaderLocations();
-		virtual void setupMatrices();
+		void setupMatrices();
+		void setupLights();
+		void setupTextures();
+		void setupShadow();
+		void setupMaterial(const Vec3& diffuse, const Vec3& specular);
+		void setupTextureToAlpha();
+
 		virtual void setupAttribs();
-		virtual void setupLights();
-		virtual void setupTextures();
-		virtual void setupShadow();
-		void setupMaterial(const ccVertex3F& diffuse, const ccVertex3F& specular);
 
 		void transformAABB(const kmAABB& box);
 		void renderOOBB();
@@ -119,13 +153,20 @@ namespace cocos3d
 		void clearLights();
 
 		CCTexture2D* m_dTexture;
-		MTLParser m_parser;
+		std::vector<CCTexture2D*> m_animationTextures;
+		int m_currentTexture;
+		float m_textureDt;
+		float m_textureAt;
+
+		bool m_textureToAlpha;
+
 		CCGLProgram* m_program;
 
-		ccVertex3F *m_lightsDiffuses,
+		Vec3 *m_lightsDiffuses,
 					*m_lightsAmbience,
 					*m_lightsPositions;
 
+		bool m_customLights;
 		bool* m_lightsEnabled;
 		float* m_lightsIntensity;
 		
@@ -140,11 +181,36 @@ namespace cocos3d
 
 		map<string,GLint> m_shaderLocations;
 
-		bool m_culling, m_shadowMapSet;
-	private:
+		bool m_culling,
+			 m_cullBackFace,
+			 m_shadowMapSet,
+			 m_lines,
+			 m_drawOBB,
+			 m_defaultLightUsed,
+			 m_lightsToSet,
+			 m_dirtyCheck;
+
+		ShineMode m_shineMode;
 		float m_opacity;
-		bool m_lines, m_drawOBB, m_defaultLightUsed, m_lightsToSet;
+		float m_exponent;
+
 		string m_id;
+		bool m_textured;
+		
+		kmAABB m_aabb;
+
+		float m_radius;
+
+		unsigned int m_nframes, m_currentFrame;
+
+		std::vector<Vec2> m_texels;
+		std::vector<Vec3> m_vertices;
+		std::vector<Vec3> m_normals;
+		std::vector<std::string> m_materials;
+		std::vector<Vec3> m_diffuses;
+		std::vector<Vec3> m_speculars;
+		std::vector<int> m_firsts;
+		std::vector<int> m_counts;
 	};
 }
 #endif

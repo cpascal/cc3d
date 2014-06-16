@@ -1,6 +1,7 @@
 #ifndef __LAYER_3D_H__
 #define __LAYER_3D_H__
 #include "cocos2d.h"
+#include "Node3D.h"
 
 using namespace cocos2d;
 
@@ -30,6 +31,7 @@ namespace cocos3d
 		std::vector<Light*>& getLights(){ return m_lights; }
 		bool lightsDirty(){ return m_lightsDirty; }
 		void cleanDirtyLights(){ m_lightsDirty = false; }
+        void makeLightsDirty(){ m_lightsDirty = true; }
 
 		virtual void setPosition(const CCPoint& position);
 		virtual void setPositionX(float posX){ setPosition(CCPoint(posX, getPositionY())); }
@@ -39,7 +41,7 @@ namespace cocos3d
 		std::vector<Light*> m_lights;
 		bool m_fixedLights, m_lightsDirty;
 		Camera* m_camera;
-		ccVertex3F m_originalCamPos, m_originalCamCenter;
+		Vec3 m_originalCamPos, m_originalCamCenter;
 
 		friend class Light;
 	};

@@ -13,11 +13,11 @@ namespace cocos3d
 		void update(float time);
 		virtual CCObject* copyWithZone(CCZone* pZone);
 	    virtual void startWithTarget(CCNode *pTarget);
-		bool initWithDuration(float duration, ccVertex3F& ambience, ccVertex3F& diffuse, ccVertex3F& specular);
+		bool initWithDuration(float duration, Vec3& ambience, Vec3& diffuse, Vec3& specular);
 	public:
-		static CCLightTo* create(float duration, ccVertex3F& ambience, ccVertex3F& diffuse, ccVertex3F& specular);
+		static CCLightTo* create(float duration, Vec3& ambience, Vec3& diffuse, Vec3& specular);
 	private:
-		ccVertex3F m_fromAmbience, m_fromDiffuse, m_fromSpecular, m_toAmbience, m_toDiffuse, m_toSpecular;
+		Vec3 m_fromAmbience, m_fromDiffuse, m_fromSpecular, m_toAmbience, m_toDiffuse, m_toSpecular;
 	}; 
 
 	struct ccVertex4F
@@ -35,32 +35,28 @@ namespace cocos3d
 	class Light : public Node3D
 	{
 	public:
-		static ccVertex3F CC_VERTEX_3F(float x, float y, float z)
-		{
-			ccVertex3F v = { x, y, z};
-			return v;
-		}
-
 		CREATE_FUNC(Light);
+
+		static const int maxLights = 4;
 
 		virtual bool init();
 
 		void setEnabled(bool enabled){ m_enabled = enabled; }
 
-		void setAmbientDiffuseSpecularIntensity(const ccVertex3F& ambient, const ccVertex3F& diffuse, const ccVertex3F& specular, float intensity = 1.0f); 
+		void setAmbientDiffuseSpecularIntensity(const Vec3& ambient, const Vec3& diffuse, const Vec3& specular, float intensity = 1.0f); 
 
-		void setAmbient(const ccVertex3F& ambient);
-		void setDiffuse(const ccVertex3F& diffuse);
-		void setSpecular(const ccVertex3F& specular);
+		void setAmbient(const Vec3& ambient);
+		void setDiffuse(const Vec3& diffuse);
+		void setSpecular(const Vec3& specular);
 		void setIntensity(const float);
 
 		void setCutOffAngle(float angle){ m_cutoffAngleCosine = angle; }
 		void setSpotExponent(float exponent){ m_spotExponent = exponent; }
 
-		const ccVertex3F& getAmbient(){ return m_ambient; }
-		const ccVertex3F& getDiffuse(){ return m_diffuse; }
-		const ccVertex3F& getSpecular(){ return m_specular; }
-		const ccVertex3F& getDirection(){ return m_direction; }
+		const Vec3& getAmbient(){ return m_ambient; }
+		const Vec3& getDiffuse(){ return m_diffuse; }
+		const Vec3& getSpecular(){ return m_specular; }
+		const Vec3& getDirection(){ return m_direction; }
 		const float getIntensity(){ return m_intensity; }
 
 		bool isEnabled(){ return m_enabled; }
@@ -68,11 +64,11 @@ namespace cocos3d
 		void setParentDirty();
 
 	protected:
-		ccVertex3F m_ambient;
-		ccVertex3F m_diffuse;
-		ccVertex3F m_specular;
-		ccVertex3F m_attenuation;
-		ccVertex3F m_direction;
+		Vec3 m_ambient;
+		Vec3 m_diffuse;
+		Vec3 m_specular;
+		Vec3 m_attenuation;
+		Vec3 m_direction;
 		float m_intensity;
 		float m_spotExponent;
 		float m_cutoffAngleCosine;

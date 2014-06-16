@@ -4,16 +4,18 @@
 #include "Camera.h"
 #include "shaders.h"
 #include "Scene3D.h"
+#include "VBOCache.h"
+#include "OBJParser.h"
 #include <limits>
 
 using namespace cocos3d;
 
-#define MAX_LIGHTS 4
-
 Model::Model()
-: m_opacity(1.0)
+: Node3D()
+, m_opacity(1.0f)
 , m_lines(false)
 , m_pVBO(0)
+, m_tVBO(0)
 , m_nVBO(0)
 , m_lightsAmbience(NULL)
 , m_lightsDiffuses(NULL)
@@ -25,34 +27,52 @@ Model::Model()
 , m_drawOBB(false)
 , m_culling(true)
 , m_shadowMapSet(false)
+, m_textured(false)
+, m_shineMode(NO_SHINE)
+, m_customLights(false)
+, m_dirtyCheck(false)
+, m_currentTexture(-1)
+, m_textureDt(0.0f)
+, m_textureAt(0.0f)
+, m_textureToAlpha(false)
+, m_cullBackFace(true)
+, m_nframes(0)
+, m_currentFrame(0)
 {
-	m_lightsAmbience = new ccVertex3F[MAX_LIGHTS]();
-	m_lightsDiffuses = new ccVertex3F[MAX_LIGHTS]();
-	m_lightsPositions = new ccVertex3F[MAX_LIGHTS]();
-	m_lightsIntensity = new float[MAX_LIGHTS]();
-	m_lightsEnabled = new bool[MAX_LIGHTS]();
+	m_lightsAmbience = new Vec3[Light::maxLights]();
+	m_lightsDiffuses = new Vec3[Light::maxLights]();
+	m_lightsPositions = new Vec3[Light::maxLights]();
+	m_lightsIntensity = new float[Light::maxLights]();
+	m_lightsEnabled = new bool[Light::maxLights]();
 }
 
 Model::~Model()
 {
-	if (m_pVBO != 0)
-		glDeleteBuffers(1, &m_pVBO);
-
-	if (m_nVBO != 0)
-		glDeleteBuffers(1, &m_nVBO);
-
 	delete [] m_lightsAmbience;
 	delete [] m_lightsDiffuses;
 	delete [] m_lightsPositions;
 	delete [] m_lightsIntensity;
 	delete [] m_lightsEnabled;
+	
+	if (m_animationTextures.size() > 0)
+	{
+		for(auto iter = m_animationTextures.begin();
+			iter != m_animationTextures.end();
+			iter++)
+		{
+			(*iter)->release();
+		}
+	}
+
+	if (m_dTexture != NULL)
+		m_dTexture->release();
 }
 
-Model* Model::createWithFiles(const string& id,
-							  const string& objFile, 
-							  const string& mtlFile, 
+Model* Model::createWithFiles(const std::string& id,
+							  const std::string& objFile, 
+							  const std::string& mtlFile, 
 							  float scale,
-							  const string& texture)
+							  const std::string& texture)
 {
 	Model *pRet = new Model();
 	if (pRet && pRet->initWithFiles(id,objFile,mtlFile,scale, texture))
@@ -68,11 +88,11 @@ Model* Model::createWithFiles(const string& id,
 	}
 }
 
-Model* Model::createWithBuffers(const string& id,
-								const string& obj, 
-								const string& mtl, 
+Model* Model::createWithBuffers(const std::string& id,
+								const std::string& obj, 
+								const std::string& mtl, 
 								float scale,
-								const string& textureName, 
+								const std::string& textureName, 
 								const char* textureBuffer, 
 								unsigned long size)
 {
@@ -90,11 +110,11 @@ Model* Model::createWithBuffers(const string& id,
 	}
 }
 
-bool Model::initWithFiles(const string& id,
-						  const string& objFile, 
-						  const string& mtlFile, 
+bool Model::initWithFiles(const std::string& id,
+						  const std::string& objFile, 
+						  const std::string& mtlFile, 
 						  float scale, 
-						  const string& texture)
+						  const std::string& texture)
 {
 	m_id = id;
 	m_scale = scale;
@@ -104,38 +124,61 @@ bool Model::initWithFiles(const string& id,
 	else
 		m_dTexture = NULL;
 
-	string fullPathObj = CCFileUtils::sharedFileUtils()->fullPathForFilename(objFile.c_str());
-	string fullPathMtl = CCFileUtils::sharedFileUtils()->fullPathForFilename(mtlFile.c_str());
+	std::string fullPathObj = CCFileUtils::sharedFileUtils()->fullPathForFilename(objFile.c_str());
+	std::string fullPathMtl = CCFileUtils::sharedFileUtils()->fullPathForFilename(mtlFile.c_str());
 
-	bool pRet = m_parser.readFile(fullPathObj, fullPathMtl, scale);
+	OBJParser* parser = new OBJParser;
 
-	m_program = CCShaderCache::sharedShaderCache()->programForKey(PHONG_SHADER_KEY);
+	bool pRet = parser->readFile(fullPathObj, fullPathMtl, scale);
 
-	if (m_program == NULL)
+	if (pRet)
 	{
-		m_program = new CCGLProgram();
-		MESH_INIT_PHONG(m_program);
-		CCShaderCache::sharedShaderCache()->addProgram(m_program,PHONG_SHADER_KEY);
+		fillVectors(parser);
+
+		m_program = CCShaderCache::sharedShaderCache()->programForKey(PHONG_SHADER_KEY);
+
+		if (m_program == NULL)
+		{
+			m_program = new CCGLProgram();
+
+			if (m_dTexture == NULL || m_texels.size() == 0)
+			{
+				MESH_INIT_PHONG(m_program);
+				CCShaderCache::sharedShaderCache()->addProgram(m_program, PHONG_SHADER_KEY);
+			}
+			else
+			{
+				MESH_INIT_PHONG_TEXTURE(m_program);
+				CCShaderCache::sharedShaderCache()->addProgram(m_program, PHONG_SHADER_TEXTURE_KEY);
+				m_textured = true;
+			}
+		}
+
+		setShaderProgram(m_program);
+
+		generateVBOs();
+		initShaderLocations();
+#if CC_ENABLE_CACHE_TEXTURE_DATA
+		CCNotificationCenter::sharedNotificationCenter()->addObserver(this,
+			callfuncO_selector(Model::listenBackToForeground),
+			EVENT_COME_TO_FOREGROUND,
+			NULL);
+#endif
+	}
+	else
+	{
+		pRet = false;
 	}
 
-	setShaderProgram(m_program);
-
-	generateVBOs();
-	initShaderLocations();
-
-	CCNotificationCenter::sharedNotificationCenter()->addObserver(this,
-                                                                  callfuncO_selector(Model::listenBackToForeground),
-                                                                  EVENT_COME_TO_FOREGROUND,
-                                                                  NULL);
 
 	return pRet && Node3D::init();
 }
 
-bool Model::initWithBuffers(const string& id,
-							const string& obj,
-							const string& mtl, 
+bool Model::initWithBuffers(const std::string& id,
+							const std::string& obj,
+							const std::string& mtl, 
 							float scale, 
-							const string& textureName, 
+							const std::string& textureName, 
 							const char* textureBuffer, 
 							unsigned long size)
 {
@@ -150,10 +193,29 @@ bool Model::initWithBuffers(const string& id,
 		{
 		
 			CCImage* image = new CCImage();
+			image->autorelease();
 			bool res = image->initWithImageData((void *)textureBuffer, size);//, CCImage::EImageFormat::kFmtPng,0,0,8);
 
 			if (res == true)
-				m_dTexture = CCTextureCache::sharedTextureCache()->addUIImage(image,textureName.c_str());
+			{
+				m_dTexture = CCTextureCache::sharedTextureCache()->addUIImage(image, textureName.c_str());
+				m_dTexture->generateMipmap();
+
+				m_dTexture->retain();
+
+				std::string glExts = std::string((const char*)glGetString(GL_EXTENSIONS));
+
+				if (glExts.find("GL_EXT_texture_filter_anisotropic") != std::string::npos)
+				{
+#if (CC_TARGET_PLATFORM == CC_PLATFORM_IOS)
+					m_dTexture->setAntiAliasTexParameters();
+#endif
+					GLfloat maxLevel;
+
+					glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &maxLevel);
+					glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, maxLevel);
+				}
+			}
 		}
 	}
     else
@@ -161,62 +223,116 @@ bool Model::initWithBuffers(const string& id,
         m_dTexture = NULL;
     }
 
-	bool pRet = m_parser.readBuffer(obj, mtl, scale);
+	OBJParser* parser = new OBJParser;
+
+	bool pRet = parser->readBuffer(obj, mtl, scale);
 
     if (pRet)
     {
-        m_program = CCShaderCache::sharedShaderCache()->programForKey(PHONG_SHADER_KEY);
+		fillVectors(parser);
+		
+		m_textured = (m_texels.size() > 0 && m_dTexture != NULL);
+
+        m_program = 
+			m_textured ? CCShaderCache::sharedShaderCache()->programForKey(PHONG_SHADER_TEXTURE_KEY)
+						: CCShaderCache::sharedShaderCache()->programForKey(PHONG_SHADER_KEY);
 
         if (m_program == NULL)
         {
             m_program = new CCGLProgram();
-            MESH_INIT_PHONG(m_program);
-            CCShaderCache::sharedShaderCache()->addProgram(m_program,PHONG_SHADER_KEY);
+            
+			if (!m_textured)
+			{
+				MESH_INIT_PHONG(m_program);
+				CCShaderCache::sharedShaderCache()->addProgram(m_program, PHONG_SHADER_KEY);
+			}
+			else
+			{
+				MESH_INIT_PHONG_TEXTURE(m_program);
+				CCShaderCache::sharedShaderCache()->addProgram(m_program, PHONG_SHADER_TEXTURE_KEY);
+			}
         }
-    }
 
-	setShaderProgram(m_program);
 
-	generateVBOs();
-	initShaderLocations();
+		setShaderProgram(m_program);
+
+		generateVBOs();
+		initShaderLocations();
 #if CC_ENABLE_CACHE_TEXTURE_DATA
-	CCNotificationCenter::sharedNotificationCenter()->addObserver(this,
-                                                                  callfuncO_selector(Model::listenBackToForeground),
-                                                                  EVENT_COME_TO_FOREGROUND,
-                                                                  NULL);
+		CCNotificationCenter::sharedNotificationCenter()->addObserver(this,
+			callfuncO_selector(Model::listenBackToForeground),
+			EVENT_COME_TO_FOREGROUND,
+			NULL);
 #endif
+    }
+	else
+	{
+		pRet = false;
+	}
+
 	return pRet && Node3D::init();
 }
 
 void Model::listenBackToForeground(CCObject *obj)
 {
 	m_program = new CCGLProgram();
-	MESH_INIT_PHONG(m_program);
-	CCShaderCache::sharedShaderCache()->addProgram(m_program,PHONG_SHADER_KEY);
+
+	if (m_textured && !m_textureToAlpha)
+	{
+		MESH_INIT_PHONG_TEXTURE(m_program);
+		CCShaderCache::sharedShaderCache()->addProgram(m_program, PHONG_SHADER_TEXTURE_KEY);
+	}
+	else
+	if (m_textureToAlpha)
+	{
+		MESH_INIT_PHONG_TEXTURE_TO_ALPHA(m_program);
+		CCShaderCache::sharedShaderCache()->addProgram(m_program, PHONG_SHADER_TEXTURE_TO_ALPHA_KEY);
+	}
+	else
+	{
+		MESH_INIT_PHONG(m_program);
+		CCShaderCache::sharedShaderCache()->addProgram(m_program, PHONG_SHADER_KEY);
+	}
+
+	if (VBOCache::sharedVBOCache()->cacheIsInvalid())
+		VBOCache::sharedVBOCache()->purgeCache();
+
 	setShaderProgram(m_program);
 	generateVBOs();
+
+	m_program->use();
+
 	initShaderLocations();
 
 	m_lightsToSet = true;
 }
 
+void Model::fillVectors(MeshParser* parser)
+{
+	m_vertices = parser->positions();
+	m_normals = parser->normals();
+	m_texels = parser->texels();
+	m_firsts = parser->firsts();
+	m_counts = parser->counts();
+	m_materials = parser->materials();
+	m_diffuses = parser->diffuses();
+	m_speculars = parser->speculars();
+	m_aabb = parser->getAABB();
+	m_radius = parser->getRadius();
+
+	delete parser;
+}
+
 void Model::generateVBOs()
 {
-	glGenBuffers(1, &m_pVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, m_pVBO);
-	glBufferData(GL_ARRAY_BUFFER, m_parser.positions().size()*sizeof(ccVertex3F), &(m_parser.positions()[0]), GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
-	
-	glBindAttribLocation(getShaderProgram()->getProgram(),5, "a_normal");
-	
-	glGenBuffers(1, &m_nVBO);
-	glBindBuffer(GL_ARRAY_BUFFER, m_nVBO);
-	glBufferData(GL_ARRAY_BUFFER, m_parser.normals().size()*sizeof(ccVertex3F), &(m_parser.normals()[0]), GL_STATIC_DRAW);
-	glBindBuffer(GL_ARRAY_BUFFER, 0);
+	VBOCache* cache = VBOCache::sharedVBOCache();
+
+	if (!cache->getVBO(m_id, &m_pVBO, &m_nVBO, &m_tVBO))
+		cache->addDataToVBOs(m_id, m_vertices, m_normals, m_texels);
 
 #if !CC_ENABLE_CACHE_TEXTURE_DATA
-	m_parser.clearPositions();
-	m_parser.clearNormals();
+	m_vertices.clear();
+	m_normals.clear();
 #endif
 }
 
@@ -248,14 +364,16 @@ void Model::initShaderLocations()
 	SETUP_LOCATION("uSpecular");
 
 	//texture
-	SETUP_LOCATION("uTexture");
 	SETUP_LOCATION("uShadowMap");
 	SETUP_LOCATION("uShadowMapEnabled");
 	
 	unsigned int textureId = 0;
 
-	if (m_dTexture != NULL)
+	if (m_textured)
+	{
+		SETUP_LOCATION("uTexture");
 		glUniform1i(m_shaderLocations["uTexture"], textureId++);
+	}
 
 	glUniform1i(m_shaderLocations["uShadowMap"], textureId);
 	glUniform1i(m_shaderLocations["uShadowMapEnabled"], (GLint)false);
@@ -268,30 +386,46 @@ void Model::setScale(float scale)
 
 void Model::clearLights()
 {
-	memset(m_lightsAmbience,0,sizeof(ccVertex3F)*MAX_LIGHTS);
-	memset(m_lightsDiffuses,0,sizeof(ccVertex3F)*MAX_LIGHTS);
-	memset(m_lightsPositions,0,sizeof(ccVertex3F)*MAX_LIGHTS);
-	memset(m_lightsEnabled,0,sizeof(bool)*MAX_LIGHTS);
-	memset(m_lightsIntensity,0,sizeof(float)*MAX_LIGHTS);
+	memset(m_lightsAmbience,0,sizeof(Vec3)*Light::maxLights);
+	memset(m_lightsDiffuses, 0, sizeof(Vec3)*Light::maxLights);
+	memset(m_lightsPositions, 0, sizeof(Vec3)*Light::maxLights);
+	memset(m_lightsEnabled, 0, sizeof(bool)*Light::maxLights);
+	memset(m_lightsIntensity, 0, sizeof(float)*Light::maxLights);
 }
 
 void Model::setupLights()
 {
 	Layer3D* parent = (Layer3D*)m_pParent;
 
+	if (m_customLights && !m_defaultLightUsed)
+	{
+		m_defaultLightUsed = true;
+		m_lightsToSet = true;
+	}
+	else
 	if (parent->getLights().size() == 0 && !m_defaultLightUsed)
 	{
 		clearLights();
 
-		ccVertex3F ambient = { 0, 0, 0};
-		ccVertex3F diffuse = { 1, 1, 1};
-		ccVertex3F position = { -100 , 852, 736 * 2 };
+		Vec3 ambient(0, 0, 0);
+		Vec3 diffuse(1, 1, 1);
+		Vec3 position(100 , 852, 736 * 2);
 
 		m_lightsAmbience[0] = ambient;
 		m_lightsDiffuses[0] = diffuse;
 		m_lightsIntensity[0] = 1.0f;
 		m_lightsPositions[0] = position;
 		m_lightsEnabled[0] = true;
+		
+		Vec3 ambient2(0, 0, 0.7f);
+		Vec3 diffuse2(1, 0.5f, 0);
+		Vec3 position2(0 , -852, 736 * 2);
+		
+		m_lightsAmbience[1] = ambient2;
+		m_lightsDiffuses[1] = diffuse2;
+		m_lightsIntensity[1] = 0.3f;
+		m_lightsPositions[1] = position2;
+		m_lightsEnabled[1] = true;
 
 		m_defaultLightUsed = true;
 
@@ -300,7 +434,7 @@ void Model::setupLights()
 		parent->cleanDirtyLights();
 	}
 	else
-	if (parent->lightsDirty())
+	if (parent->lightsDirty() && !m_customLights)
 	{
 		m_defaultLightUsed = false;
 
@@ -312,7 +446,7 @@ void Model::setupLights()
 
 		int i = 0;
 
-		for (auto iter = lights.begin(); i < MAX_LIGHTS; i++)
+		for (auto iter = lights.begin(); i < Light::maxLights; i++)
 		{
 			if (i < (int)lights.size() && iter != lights.end())
 			{
@@ -322,9 +456,9 @@ void Model::setupLights()
 				m_lightsDiffuses[i] = light->getDiffuse();
 				m_lightsIntensity[i] = light->getIntensity();
 
-				m_lightsPositions[i].x = light->get3DPosition().x * m_scale;
-				m_lightsPositions[i].y = light->get3DPosition().y * m_scale;
-				m_lightsPositions[i].z = light->get3DPosition().z * m_scale;
+				m_lightsPositions[i].x = light->get3DPosition().x ;
+				m_lightsPositions[i].y = light->get3DPosition().y;
+				m_lightsPositions[i].z = light->get3DPosition().z;
 
 				if (light->isEnabled())
 					m_lightsEnabled[i] = true;
@@ -334,13 +468,13 @@ void Model::setupLights()
 		}
  	}
 
-	if (m_lightsToSet)
+	if (m_lightsToSet || true)
 	{
-		glUniform1iv(m_shaderLocations["uLightEnabled"], MAX_LIGHTS, (GLint*)m_lightsEnabled);
-		glUniform3fv(m_shaderLocations["uLightAmbience"], MAX_LIGHTS, (GLfloat*)m_lightsAmbience);
-		glUniform3fv(m_shaderLocations["uLightDiffuse"], MAX_LIGHTS, (GLfloat*)m_lightsDiffuses);
-		glUniform3fv(m_shaderLocations["uLightPosition"], MAX_LIGHTS, (GLfloat*)m_lightsPositions);
-		glUniform1fv(m_shaderLocations["uLightIntensity"],  MAX_LIGHTS, (GLfloat*)m_lightsIntensity);
+		glUniform1iv(m_shaderLocations["uLightEnabled"], Light::maxLights, (GLint*)m_lightsEnabled);
+		glUniform3fv(m_shaderLocations["uLightAmbience"], Light::maxLights, (GLfloat*)m_lightsAmbience);
+		glUniform3fv(m_shaderLocations["uLightDiffuse"], Light::maxLights, (GLfloat*)m_lightsDiffuses);
+		glUniform3fv(m_shaderLocations["uLightPosition"], Light::maxLights, (GLfloat*)m_lightsPositions);
+		glUniform1fv(m_shaderLocations["uLightIntensity"],  Light::maxLights, (GLfloat*)m_lightsIntensity);
 	}
 
 	m_lightsToSet = false;
@@ -349,28 +483,41 @@ void Model::setupLights()
 void Model::setupAttribs()
 {
 	//setup texels or vertices for textures
-	if (m_parser.texels().size() > 0)
-		glVertexAttribPointer(kCCVertexAttrib_TexCoords, 2, GL_FLOAT, GL_FALSE, 0, &(m_parser.texels()[0]));
+	if (m_textured)
+	{
+		if (m_tVBO == 0)
+		{
+			glVertexAttribPointer(kCCVertexAttrib_TexCoords, 2, GL_FLOAT, GL_FALSE, 0, &(m_texels[0]));
+		}
+		else
+		{
+			glBindBuffer(GL_ARRAY_BUFFER, m_tVBO);
+			glVertexAttribPointer(kCCVertexAttrib_TexCoords, 2, GL_FLOAT, GL_FALSE, 0, 0);
+			glBindBuffer(GL_ARRAY_BUFFER, 0);
+		}
+	}
 
 	if (m_nVBO == 0)
 	{
-		glVertexAttribPointer(glGetAttribLocation(getShaderProgram()->getProgram(), "a_normal"), 3, GL_FLOAT, GL_FALSE, 0, &(m_parser.normals()[0]));
+		glVertexAttribPointer(glGetAttribLocation(getShaderProgram()->getProgram(), "a_normal"), 3, GL_FLOAT, GL_FALSE, 0, &(m_normals[0]));
 	}
 	else
 	{
 		glBindBuffer(GL_ARRAY_BUFFER, m_nVBO);
 		glVertexAttribPointer(glGetAttribLocation(getShaderProgram()->getProgram(), "a_normal"), 3, GL_FLOAT, GL_FALSE, 0, 0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 	
 	//vertices as shader attributes
 	if (m_pVBO == 0)
 	{
-		glVertexAttribPointer(kCCVertexAttrib_Position, 3, GL_FLOAT, GL_FALSE, 0, &(m_parser.positions()[0]));
+		glVertexAttribPointer(kCCVertexAttrib_Position, 3, GL_FLOAT, GL_FALSE, 0, &(m_vertices[0]));
 	}
 	else
 	{
 		glBindBuffer(GL_ARRAY_BUFFER, m_pVBO);
 		glVertexAttribPointer(kCCVertexAttrib_Position, 3, GL_FLOAT, GL_FALSE, 0, 0);
+		glBindBuffer(GL_ARRAY_BUFFER, 0);
 	}
 }
 
@@ -394,8 +541,8 @@ void Model::transformAABB(const kmAABB& box)
 	}
 
 #if (CC_TARGET_PLATFORM != CC_PLATFORM_ANDROID)
-#undef max()
-#undef min()
+#undef max() 
+#undef min() 
 #endif
 
 	float xMax = numeric_limits<float>::min();
@@ -441,6 +588,19 @@ void Model::transformAABB(const kmAABB& box)
 	kmVec3Fill(&(m_bbox.max), xMax, yMax, zMax);
 }
 
+void CGAffineToGL(const CCAffineTransform *t, GLfloat *m)
+{
+	// | m[0] m[4] m[8]  m[12] |     | m11 m21 m31 m41 |     | a c 0 tx |
+	// | m[1] m[5] m[9]  m[13] |     | m12 m22 m32 m42 |     | b d 0 ty |
+	// | m[2] m[6] m[10] m[14] | <=> | m13 m23 m33 m43 | <=> | 0 0 1  0 |
+	// | m[3] m[7] m[11] m[15] |     | m14 m24 m34 m44 |     | 0 0 0  1 |
+
+	m[2] = m[3] = m[6] = m[7] = m[8] = m[9] = m[11] = m[14] = 0.0f;
+	m[10] = m[15] = 1.0f;
+	m[0] = t->a; m[4] = t->c; m[12] = t->tx;
+	m[1] = t->b; m[5] = t->d; m[13] = t->ty;
+}
+
 void Model::setupMatrices()
 {
 	Layer3D* parent = dynamic_cast<Layer3D*>(m_pParent);
@@ -476,8 +636,13 @@ void Model::setupMatrices()
 		//MVP matrix
 		kmMat4Multiply(&m_matrixMVP, &matrixP, &m_matrixMV);
 
-		transformAABB(m_parser.m_aabb);
+		transformAABB(m_aabb);
 	}
+
+	//kmMat4 transform4x4;
+	//CCAffineTransform tmpAffine = parent->getParent()->nodeToParentTransform();
+	//CGAffineToGL(&tmpAffine, transform4x4.mat);
+	//kmMat4Multiply(&m_matrixMVP, &m_matrixMVP, &transform4x4);
 
 	//pass matrices to shader
 	glUniformMatrix4fv(m_shaderLocations["CC_MVPMatrix"], 1, 0, m_matrixMVP.mat);
@@ -485,7 +650,7 @@ void Model::setupMatrices()
 	glUniformMatrix4fv(m_shaderLocations["CC_MMatrix"], 1, 0, m_matrixM.mat);
 	glUniformMatrix4fv(m_shaderLocations["CC_VMatrix"], 1, 0, parent->get3DCamera()->getViewMatrix().mat);
 	glUniformMatrix4fv(m_shaderLocations["CC_NormalMatrix"], 1, 0, m_matrixNormal.mat);
-	glUniform1i(m_shaderLocations["mode"], 4);
+	glUniform1i(m_shaderLocations["mode"], m_shineMode);
 	glUniform1f(m_shaderLocations["alpha"], m_opacity);
 
 }
@@ -533,11 +698,20 @@ void Model::setupTextures()
 	unsigned int textureId = 0;
 
 	//Setup texture for simple Phong shader
-	if (m_dTexture != NULL)
+	if (m_textured)
 	{
-		glBindTexture(GL_TEXTURE_2D, m_dTexture->getName());
-		glActiveTexture(GL_TEXTURE0 + textureId);
-		glUniform1i(m_shaderLocations["uTexture"], textureId++);
+		glActiveTexture(GL_TEXTURE0 + textureId++);
+		
+		if (m_currentTexture == -1)
+			glBindTexture(GL_TEXTURE_2D, m_dTexture->getName());
+		else
+			glBindTexture(GL_TEXTURE_2D, m_animationTextures[m_currentTexture]->getName());
+
+		if (m_textureToAlpha)
+			setupTextureToAlpha();
+
+		//FIXME!!! Don't return. Set the shadow map as well!	
+		return;
 	}
 
 	Scene3D* scene = (Scene3D*)m_pParent->getParent();
@@ -546,14 +720,30 @@ void Model::setupTextures()
 	if (shadowMap != NULL)
 	{
 		glUniform1i(m_shaderLocations["uShadowMapEnabled"], (GLint)true);
-		glBindTexture(GL_TEXTURE_2D, shadowMap->getName());
 		glActiveTexture(GL_TEXTURE0 + textureId);
+		glBindTexture(GL_TEXTURE_2D, shadowMap->getName());
+
 		m_shadowMapSet = true;
+	}
+	else
+	{
+		glUniform1i(m_shaderLocations["uShadowMapEnabled"], (GLint)false);
 	}
 }
 
 void Model::draw3D()
 {
+	if (!m_dirtyCheck)
+		m_dirty = true;
+	
+	m_textureAt += CCDirector::sharedDirector()->getDeltaTime();
+	
+	if (m_textureDt > 0 && m_textureAt >= m_textureDt)
+	{
+		nextTexture();
+		m_textureAt = 0;
+	}
+	 
 	setupMatrices();
 	setupShadow();
 
@@ -569,28 +759,36 @@ void Model::draw3D()
 	setupTextures();
 
 	//render by material
-	glEnable(GL_CULL_FACE);
-	glCullFace(GL_BACK);
-	for (int i=0; i < (int)m_parser.materials().size(); ++i)
+	if (m_cullBackFace)
 	{
-		setupMaterial(m_parser.diffuses()[i],m_parser.speculars()[i]);		
+		glEnable(GL_CULL_FACE);
+		glCullFace(GL_BACK);
+	}
+
+	for (int i=0; i < (int)m_materials.size(); ++i)
+	{
+		setupMaterial(m_diffuses[i],m_speculars[i]);		
 		setupAttribs();
 
 		if (m_lines)
-			glDrawArrays(GL_LINES, m_parser.firsts()[i], m_parser.counts()[i]);
+			glDrawArrays(GL_LINES, m_firsts[i], m_counts[i]);
 		else
-			glDrawArrays(GL_TRIANGLES, m_parser.firsts()[i], m_parser.counts()[i]);
+			glDrawArrays(GL_TRIANGLES, m_firsts[i], m_counts[i]);
 
 		CC_INCREMENT_GL_DRAWS(1);
     }
 
-	glDisable(GL_CULL_FACE);
+	if (m_cullBackFace)
+		glDisable(GL_CULL_FACE);
+
 	glBindBuffer(GL_ARRAY_BUFFER, 0);
 
 	CHECK_GL_ERROR_DEBUG();	
 
 	if (m_drawOBB)
 		renderOOBB();
+	
+	glBindTexture(GL_TEXTURE_2D, NULL);
 }
 
 void Model::setFrustumCulling(bool culling)
@@ -611,36 +809,36 @@ void Model::renderOOBB()
 	
 	program->setUniformLocationWithMatrix4fv(loc, m_matrixMVP.mat, 1);
 	
-	ccVertex3F points[24];
+	Vec3 points[24];
 	
-	points[0].x = m_parser.m_aabb.min.x; points[0].y = m_parser.m_aabb.min.y; points[0].z = m_parser.m_aabb.max.z; 
-	points[1].x = m_parser.m_aabb.min.x; points[1].y = m_parser.m_aabb.max.y; points[1].z = m_parser.m_aabb.max.z;
-	points[2].x = m_parser.m_aabb.min.x; points[2].y = m_parser.m_aabb.max.y; points[2].z = m_parser.m_aabb.max.z;
-	points[3].x = m_parser.m_aabb.max.x; points[3].y = m_parser.m_aabb.max.y; points[3].z = m_parser.m_aabb.max.z;
-	points[4].x = m_parser.m_aabb.max.x; points[4].y = m_parser.m_aabb.max.y; points[4].z = m_parser.m_aabb.max.z;
-	points[5].x = m_parser.m_aabb.max.x; points[5].y = m_parser.m_aabb.min.y; points[5].z = m_parser.m_aabb.max.z;
-	points[6].x = m_parser.m_aabb.max.x; points[6].y = m_parser.m_aabb.min.y; points[6].z = m_parser.m_aabb.max.z;
-	points[7].x = m_parser.m_aabb.min.x; points[7].y = m_parser.m_aabb.min.y; points[7].z = m_parser.m_aabb.max.z;
+	points[0].x = m_aabb.min.x; points[0].y = m_aabb.min.y; points[0].z = m_aabb.max.z;
+	points[1].x = m_aabb.min.x; points[1].y = m_aabb.max.y; points[1].z = m_aabb.max.z;
+	points[2].x = m_aabb.min.x; points[2].y = m_aabb.max.y; points[2].z = m_aabb.max.z;
+	points[3].x = m_aabb.max.x; points[3].y = m_aabb.max.y; points[3].z = m_aabb.max.z;
+	points[4].x = m_aabb.max.x; points[4].y = m_aabb.max.y; points[4].z = m_aabb.max.z;
+	points[5].x = m_aabb.max.x; points[5].y = m_aabb.min.y; points[5].z = m_aabb.max.z;
+	points[6].x = m_aabb.max.x; points[6].y = m_aabb.min.y; points[6].z = m_aabb.max.z;
+	points[7].x = m_aabb.min.x; points[7].y = m_aabb.min.y; points[7].z = m_aabb.max.z;
 
-	points[8].x = m_parser.m_aabb.min.x; points[8].y = m_parser.m_aabb.min.y; points[8].z = m_parser.m_aabb.min.z; 
-	points[9].x = m_parser.m_aabb.min.x; points[9].y = m_parser.m_aabb.max.y; points[9].z = m_parser.m_aabb.min.z;
-	points[10].x = m_parser.m_aabb.min.x; points[10].y = m_parser.m_aabb.max.y; points[10].z = m_parser.m_aabb.min.z;
-	points[11].x = m_parser.m_aabb.max.x; points[11].y = m_parser.m_aabb.max.y; points[11].z = m_parser.m_aabb.min.z;
-	points[12].x = m_parser.m_aabb.max.x; points[12].y = m_parser.m_aabb.max.y; points[12].z = m_parser.m_aabb.min.z;
-	points[13].x = m_parser.m_aabb.max.x; points[13].y = m_parser.m_aabb.min.y; points[13].z = m_parser.m_aabb.min.z;
-	points[14].x = m_parser.m_aabb.max.x; points[14].y = m_parser.m_aabb.min.y; points[14].z = m_parser.m_aabb.min.z;
-	points[15].x = m_parser.m_aabb.min.x; points[15].y = m_parser.m_aabb.min.y; points[15].z = m_parser.m_aabb.min.z;
+	points[8].x = m_aabb.min.x; points[8].y = m_aabb.min.y; points[8].z = m_aabb.min.z;
+	points[9].x = m_aabb.min.x; points[9].y = m_aabb.max.y; points[9].z = m_aabb.min.z;
+	points[10].x = m_aabb.min.x; points[10].y = m_aabb.max.y; points[10].z = m_aabb.min.z;
+	points[11].x = m_aabb.max.x; points[11].y = m_aabb.max.y; points[11].z = m_aabb.min.z;
+	points[12].x = m_aabb.max.x; points[12].y = m_aabb.max.y; points[12].z = m_aabb.min.z;
+	points[13].x = m_aabb.max.x; points[13].y = m_aabb.min.y; points[13].z = m_aabb.min.z;
+	points[14].x = m_aabb.max.x; points[14].y = m_aabb.min.y; points[14].z = m_aabb.min.z;
+	points[15].x = m_aabb.min.x; points[15].y = m_aabb.min.y; points[15].z = m_aabb.min.z;
 
-	points[16].x = m_parser.m_aabb.min.x; points[16].y = m_parser.m_aabb.min.y; points[16].z = m_parser.m_aabb.min.z; 
-	points[17].x = m_parser.m_aabb.min.x; points[17].y = m_parser.m_aabb.min.y; points[17].z = m_parser.m_aabb.max.z;
-	points[18].x = m_parser.m_aabb.min.x; points[18].y = m_parser.m_aabb.max.y; points[18].z = m_parser.m_aabb.min.z;
-	points[19].x = m_parser.m_aabb.min.x; points[19].y = m_parser.m_aabb.max.y; points[19].z = m_parser.m_aabb.max.z;
+	points[16].x = m_aabb.min.x; points[16].y = m_aabb.min.y; points[16].z = m_aabb.min.z;
+	points[17].x = m_aabb.min.x; points[17].y = m_aabb.min.y; points[17].z = m_aabb.max.z;
+	points[18].x = m_aabb.min.x; points[18].y = m_aabb.max.y; points[18].z = m_aabb.min.z;
+	points[19].x = m_aabb.min.x; points[19].y = m_aabb.max.y; points[19].z = m_aabb.max.z;
 	
-	points[20].x = m_parser.m_aabb.max.x; points[20].y = m_parser.m_aabb.min.y; points[20].z = m_parser.m_aabb.min.z;
-	points[21].x = m_parser.m_aabb.max.x; points[21].y = m_parser.m_aabb.min.y; points[21].z = m_parser.m_aabb.max.z;
+	points[20].x = m_aabb.max.x; points[20].y = m_aabb.min.y; points[20].z = m_aabb.min.z;
+	points[21].x = m_aabb.max.x; points[21].y = m_aabb.min.y; points[21].z = m_aabb.max.z;
 	
-	points[22].x = m_parser.m_aabb.max.x; points[22].y = m_parser.m_aabb.max.y; points[22].z = m_parser.m_aabb.min.z;
-	points[23].x = m_parser.m_aabb.max.x; points[23].y = m_parser.m_aabb.max.y; points[23].z = m_parser.m_aabb.max.z;
+	points[22].x = m_aabb.max.x; points[22].y = m_aabb.max.y; points[22].z = m_aabb.min.z;
+	points[23].x = m_aabb.max.x; points[23].y = m_aabb.max.y; points[23].z = m_aabb.max.z;
 
 	glVertexAttribPointer(kCCVertexAttrib_Position, 3, GL_FLOAT, GL_FALSE, 0, points);
  	glDrawArrays(GL_LINES, 0, 24);
@@ -651,20 +849,20 @@ void Model::renderOOBB()
 	CC_INCREMENT_GL_DRAWS(1);
 }
 
-void Model::setupMaterial(const ccVertex3F& diffuses, const ccVertex3F& speculars)
+void Model::setupMaterial(const Vec3& diffuses, const Vec3& speculars)
 {
 	glUniform3f(m_shaderLocations["uDiffuse"], diffuses.x,diffuses.y,diffuses.z);
 	glUniform3f(m_shaderLocations["uSpecular"], speculars.x, speculars.y, speculars.z);
 }
 
-const ccVertex3F& Model::getCenter()
+const Vec3& Model::getCenter()
 { 
 	return get3DPosition();
 }
 
 float Model::getRadius()
 { 
-	return m_parser.getRadius() * m_scale;
+	return m_radius * m_scale;
 }
 
 bool Model::isOutOfCamera(Frustum::Planes plane)
@@ -672,7 +870,7 @@ bool Model::isOutOfCamera(Frustum::Planes plane)
 	Layer3D* parent = dynamic_cast<Layer3D*>(m_pParent);
 
 	if (parent == NULL)
-		return true;
+		return false;
 
 	return !(parent->get3DCamera()->isObjectVisible(this,plane));
 }
@@ -687,6 +885,100 @@ void Model::renderLines(bool lines)
 	m_lines = lines;
 }
 
+void Model::setShineMode(ShineMode mode, float exponent)
+{
+	m_shineMode = mode;
+	m_exponent = exponent;
+}
+
+void Model::addCustomLights(const std::list<Light*>& lights)
+{
+	if (lights.size() == 0)
+		return;
+
+	m_defaultLightUsed = false;
+	m_customLights = true;
+
+	auto iter = lights.begin();
+	for (int i = 0; iter != lights.end() && i < Light::maxLights; i++, iter++)
+	{
+		const Vec3 ambient = (*iter)->getAmbient();
+		const Vec3 diffuse = (*iter)->getDiffuse();
+		const Vec3 position = (*iter)->get3DPosition();
+
+		m_lightsAmbience[i] = ambient;
+		m_lightsDiffuses[i] = diffuse;
+		m_lightsIntensity[i] = (*iter)->getIntensity();
+		m_lightsPositions[i] = position;
+		m_lightsEnabled[i] = true;
+	}
+}
+
+void Model::backFaceCulling(bool culling)
+{
+	m_cullBackFace = culling;
+}
+
+void Model::addAnimationTextures(const std::vector<CCTexture2D*>& textures, float time)
+{
+	if (textures.size() == 0)
+		return;
+	
+	m_animationTextures = textures;
+	m_textureDt = time;
+	
+	for (auto iter = textures.begin(); iter != textures.end(); iter++)
+	{
+		(*iter)->retain();
+	}
+}
+
+void Model::setCurrentTexture(int position)
+{
+	if (position < (int)TEXTURE_0 || position >= (int)m_animationTextures.size())
+		return;
+
+	m_currentTexture = position;
+}
+
+void Model::nextTexture()
+{
+	m_currentTexture++;
+	
+	if (m_currentTexture == m_animationTextures.size())
+		m_currentTexture = -1;
+}
+
+void Model::setTextureToAlpha()
+{
+	if (!m_textured)
+		return;
+
+	m_textureToAlpha = true;
+
+	m_program = CCShaderCache::sharedShaderCache()->programForKey(PHONG_SHADER_TEXTURE_TO_ALPHA_KEY);
+
+	if (m_program == NULL)
+	{
+		m_program = new CCGLProgram();
+
+		MESH_INIT_PHONG_TEXTURE_TO_ALPHA(m_program);
+		CCShaderCache::sharedShaderCache()->addProgram(m_program, PHONG_SHADER_TEXTURE_TO_ALPHA_KEY);
+	}
+
+	setShaderProgram(m_program);
+	m_program->use();
+	
+	m_shaderLocations.clear();
+	initShaderLocations();
+
+	m_shaderLocations["uAccTime"] = glGetUniformLocation(m_program->getProgram(), "uAccTime");
+}
+
+void Model::setupTextureToAlpha()
+{
+	glUniform1f(m_shaderLocations["uAccTime"], m_textureAt*0.5f);
+}
 
 //TODO: Move to an actions header/cpp
 
@@ -725,6 +1017,7 @@ bool SpinBy::initWithDuration(float fDuration, float fDeltaAngleX, float fDeltaA
     {
         m_fAngleX = fDeltaAngleX;
         m_fAngleY = fDeltaAngleY;
+		m_fAngleZ = fDeltaAngleZ;
         return true;
     }
     
@@ -770,8 +1063,8 @@ void SpinBy::update(float time)
     {
 		Model* model = (Model*)m_pTarget;
         model->setYaw(m_fStartAngleX + m_fAngleX * time);
-        //model->setRoll(m_fStartAngleY + m_fAngleY * time);
-		//model->setPitch(m_fStartAngleZ + m_fAngleZ * time);
+		model->setRoll(m_fStartAngleY + m_fAngleY * time);
+		model->setPitch(m_fStartAngleZ + m_fAngleZ * time);
     }
 }
 

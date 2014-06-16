@@ -43,10 +43,10 @@ namespace cocos3d
 		virtual bool init();
 
 		void setPosition(float x, float y);
-		void setPosition(const ccVertex3F& position);
+		void setPosition(const Vec3& position);
 		void setPosition(const CCPoint& position);
 		const CCPoint& getPosition();
-		const ccVertex3F& get3DPosition();
+		const Vec3& get3DPosition();
 		void getPosition(float* x, float* y);
 		void  setPositionX(float x);
 		float getPositionX(void);
@@ -55,17 +55,17 @@ namespace cocos3d
 		void setPosition(float x, float y, float z);
 		void setPositionZ(float z);
 
-		void lookAt(const ccVertex3F& position);
+		void lookAt(const Vec3& position);
 		void lookAt(const CCPoint& position);
 
-		const ccVertex3F& getLookAt();
+		const Vec3& getLookAt();
 
 		void setProjection(float fov, float ratio, float near, float far);
 		void setFOV(float fov);
 		void setNear(float nearV);
 		void setFar(float farV);
 		void setNearFar(float nearV, float farV);
-		void setUp(const ccVertex3F& up);
+		void setUp(const Vec3& up);
 
 		bool isDirty();
 		void notDirty();
@@ -81,7 +81,7 @@ namespace cocos3d
 		kmMat4 m_projectionMatrix, m_viewMatrix;
 		kmVec3 m_eye, m_center, m_up;
 		GLfloat m_fov, m_ratio, m_near, m_far;
-		ccVertex3F m_lookAt3d;
+		Vec3 m_lookAt3d;
 
 		bool m_projectionDirty, m_viewDirty;
 

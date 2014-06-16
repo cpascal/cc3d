@@ -3,7 +3,7 @@
 
 using namespace cocos3d;
 
-CCLightTo* CCLightTo::create(float duration, ccVertex3F& ambience, ccVertex3F& diffuse, ccVertex3F& specular)
+CCLightTo* CCLightTo::create(float duration, Vec3& ambience, Vec3& diffuse, Vec3& specular)
 {
     CCLightTo* pAction = new CCLightTo();
 
@@ -13,7 +13,7 @@ CCLightTo* CCLightTo::create(float duration, ccVertex3F& ambience, ccVertex3F& d
     return pAction;
 }
 
-bool CCLightTo::initWithDuration(float duration, ccVertex3F& ambience, ccVertex3F& diffuse, ccVertex3F& specular)
+bool CCLightTo::initWithDuration(float duration, Vec3& ambience, Vec3& diffuse, Vec3& specular)
 {
 	if (CCActionInterval::initWithDuration(duration))
 	{
@@ -52,26 +52,26 @@ CCObject* CCLightTo::copyWithZone(CCZone *pZone)
 
 void CCLightTo::update(float time)
 {
-	ccVertex3F curAmb = 
-	{ 
+	Vec3 curAmb 
+	(
 		m_fromAmbience.x + (m_toAmbience.x - m_fromAmbience.x) * time,
 		m_fromAmbience.y + (m_toAmbience.y - m_fromAmbience.y) * time,
 		m_fromAmbience.z + (m_toAmbience.z - m_fromAmbience.z) * time
-	};
+	);
 
-	ccVertex3F curDif =
-	{
+	Vec3 curDif
+	(
 		m_fromDiffuse.x + (m_toDiffuse.x - m_fromDiffuse.x) * time,
 		m_fromDiffuse.y + (m_toDiffuse.y - m_fromDiffuse.y) * time,
 		m_fromDiffuse.z + (m_toDiffuse.z - m_fromDiffuse.z) * time
-	};
+	);
 
-	ccVertex3F curSpec = 
-	{
+	Vec3 curSpec
+	(
 		m_fromSpecular.x + (m_toSpecular.x - m_fromSpecular.x) * time,
 		m_fromSpecular.y + (m_toSpecular.y - m_fromSpecular.y) * time,
 		m_fromSpecular.z + (m_toSpecular.z - m_fromSpecular.z) * time
-	};
+	);
 
 	Light* light = dynamic_cast<Light*>(m_pTarget);
 	if (light != NULL)
@@ -103,7 +103,7 @@ bool Light::init()
 	return CCNode::init();
 }
 
-void Light::setAmbientDiffuseSpecularIntensity(const ccVertex3F& ambient, const ccVertex3F& diffuse, const ccVertex3F& specular, float intensity)
+void Light::setAmbientDiffuseSpecularIntensity(const Vec3& ambient, const Vec3& diffuse, const Vec3& specular, float intensity)
 {
 	m_ambient = ambient;
 	m_diffuse = diffuse;
@@ -111,17 +111,17 @@ void Light::setAmbientDiffuseSpecularIntensity(const ccVertex3F& ambient, const 
 	m_intensity = intensity;
 }
 
-void Light::setAmbient(const ccVertex3F& ambient)
+void Light::setAmbient(const Vec3& ambient)
 {
 	m_ambient = ambient;
 }
 
-void Light::setDiffuse(const ccVertex3F& diffuse)
+void Light::setDiffuse(const Vec3& diffuse)
 {
 	m_diffuse = diffuse;
 }
 
-void Light::setSpecular(const ccVertex3F& specular)
+void Light::setSpecular(const Vec3& specular)
 {
 	m_specular = specular;
 }

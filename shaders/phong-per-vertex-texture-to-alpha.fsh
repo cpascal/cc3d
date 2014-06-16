@@ -1,8 +1,10 @@
 precision mediump float; 
 varying vec4 v_color;
 
+uniform sampler2D uTexture;
 uniform sampler2D uShadowMap;
 uniform bool uShadowMapEnabled;
+uniform float uAccTime;
 
 varying vec2 v_texCoord;
 varying vec4 v_projectorCoord;
@@ -31,5 +33,10 @@ void main()
     projTexColor = vec4(1.0);
   }
 
-  gl_FragColor = v_color * projTexColor;
+  vec4 color = v_color * projTexColor * texture2D(uTexture, v_texCoord);
+
+  if (v_texCoord.y >= pow(sin(uAccTime),2.0))
+	color = vec4(0.0);
+
+  gl_FragColor = color;
 }

@@ -102,11 +102,7 @@ void Layer3D::setPosition(const CCPoint& position)
 		{
 			Light* light = *iter;
 
-			ccVertex3F newPosition = 
-			{  
-				light->getPosition().x + position.x,  
-				light->getPosition().y + position.y 
-			};
+			Vec3 newPosition(light->getPosition().x + position.x, light->getPosition().y + position.y, 0);
 
 			light->setPosition(newPosition);
 		}
@@ -116,18 +112,17 @@ void Layer3D::setPosition(const CCPoint& position)
 
 	if (m_camera != NULL)
 	{
-		const ccVertex3F camPos = m_camera->get3DPosition();
-		const ccVertex3F lookAt = m_camera->getLookAt();
+		const Vec3 camPos = m_camera->get3DPosition();
+		const Vec3 lookAt = m_camera->getLookAt();
 	
 		CCSize size = CCDirector::sharedDirector()->getWinSize();
 
 		//FIXME: We are fixing the camera at the middle!!!!!
-		ccVertex3F newPos = { static_cast<GLfloat>(size.width/2.0 - position.x), static_cast<GLfloat>(size.height/2.0 - position.y), camPos.z };
-		ccVertex3F newLookAt = { newPos.x, newPos.y, lookAt.z };
+		Vec3 newPos(static_cast<GLfloat>(size.width/2.0 - position.x), static_cast<GLfloat>(size.height/2.0 - position.y), camPos.z);
+		Vec3 newLookAt(newPos.x, newPos.y, lookAt.z);
 		
 		m_camera->setPosition(newPos);
 		m_camera->lookAt(newLookAt);
-		
 	}
 
 	CCLayer::setPosition(position);

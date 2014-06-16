@@ -1,6 +1,8 @@
 #define MAX_LIGHTS 4
 attribute vec3 a_position;
+attribute vec2 a_texCoord;
 attribute vec3 a_normal;
+attribute vec3 a_links;
 
 uniform mat4 CC_MMatrix;
 uniform mat4 CC_VMatrix;
@@ -20,6 +22,7 @@ uniform mat4 uShadowProjectionMatrix;
 
 varying vec4 v_color;
 varying vec4 v_projectorCoord;
+varying vec2 v_texCoord;
 varying float v_distance;
 
 void main()
@@ -29,7 +32,13 @@ void main()
 	// all following gemetric computations are performed in the
 	// camera coordinate system (aka eye coordinates)
 
-	highp vec3 normal = normalize(vec3(CC_NormalMatrix * vec4(a_normal, 0.0)));
+	vec3 newNormal = a_normal;
+
+	//newNormal.x += a_links.x*sin(CC_Time.x);
+	//newNormal.y += a_links.y*sin(CC_Time.x);
+	//newNormal.z += a_links.z*sin(CC_Time.x);
+
+	highp vec3 normal = normalize(vec3(CC_NormalMatrix * vec4(newNormal, 0.0)));
 	vec4 vertPos4 = CC_MVMatrix * vec4(a_position, 1.0);
 
 	v_distance = vertPos4.z;
@@ -67,7 +76,19 @@ void main()
 			frontColor += vec3(defaultAmbience*uLightAmbience[i] + lambertian*uDiffuse*uLightDiffuse[i] + specular*uSpecular) * uLightIntensity[i];	
 	}
 
-	v_color = vec4(frontColor,alpha);
+	vec3 new_pos = vec3(a_position);
+
+	new_pos.x += a_links.x*sin(CC_Time.x);
+	new_pos.y += a_links.y*sin(CC_Time.x);
+	new_pos.z += a_links.z*sin(CC_Time.x);
+
+	vec3 step = uDiffuse*vec3(new_pos.z/abs(a_links.z));
+
+	float clampedR = clamp(step.x, frontColor.r, uDiffuse.r + 0.3);
+	float clampedG = clamp(step.y, frontColor.g, uDiffuse.g + 0.3);
+	float clampedB = clamp(step.z, frontColor.b, uDiffuse.b + 0.3);
+
+	v_color = vec4(clampedR, clampedG, clampedB, alpha);
 
 	v_projectorCoord = uShadowProjectionMatrix * (CC_MMatrix * vec4(a_position, 1.0));
 

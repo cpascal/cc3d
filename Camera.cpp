@@ -25,7 +25,7 @@ bool Camera::init()
 	return CCNode::init();
 }
 
-void Camera::setPosition(const ccVertex3F& position)
+void Camera::setPosition(const Vec3& position)
 {
 	m_eye.x = position.x;
 	m_eye.y = position.y;
@@ -106,7 +106,7 @@ const CCPoint& Camera::getPosition()
 	return m_position;
 }
 
-const ccVertex3F& Camera::get3DPosition()
+const Vec3& Camera::get3DPosition()
 {
 	m_fullPosition.x = m_eye.x;
 	m_fullPosition.y = m_eye.y;
@@ -115,7 +115,7 @@ const ccVertex3F& Camera::get3DPosition()
 	return m_fullPosition;
 }
 
-void Camera::lookAt(const ccVertex3F& position)
+void Camera::lookAt(const Vec3& position)
 {
 	m_center.x = position.x;
 	m_center.y = position.y;
@@ -132,7 +132,7 @@ void Camera::lookAt(const CCPoint& position)
 	m_viewDirty = true;
 }
 
-const ccVertex3F& Camera::getLookAt()
+const Vec3& Camera::getLookAt()
 {
 	m_lookAt3d.x = m_center.x;
 	m_lookAt3d.y = m_center.y;
@@ -141,7 +141,7 @@ const ccVertex3F& Camera::getLookAt()
 	return m_lookAt3d;
 }
 
-void Camera::setUp(const ccVertex3F& up)
+void Camera::setUp(const Vec3& up)
 {
 	m_up.x = up.x;
 	m_up.y = up.y;
@@ -309,7 +309,7 @@ bool Frustum::isBoxInFrustumPerPoint(kmAABB& box, Planes plane)
 		}
 		else
 		{
-			if (isPointInFrustum(v[i],plane));
+			if (isPointInFrustum(v[i],plane))
 				return true;
 		}
 	}

@@ -2,18 +2,12 @@
 
 using namespace cocos3d;
 
-#define PARENT_LAYER_DELTA() \
-if (getParent() != NULL) \
-{\
-	pDeltaX = getParent()->getPositionX();\
-	pDeltaY = getParent()->getPositionY();\
-}
-
 Node3D::Node3D() 
 : m_position(CCPoint(0,0))
 , m_yaw(0)
 , m_pitch(0)
 , m_roll(0)
+, m_scale(1.0f)
 , m_dirty(true)
 {
 	m_fullPosition.x = m_fullPosition.y = m_fullPosition.z = 0.0f;
@@ -38,7 +32,7 @@ void Node3D::visit()
 	CCNode::visit();
 }
 
-void Node3D::setYawPitchRoll(const ccVertex3F& ypr)
+void Node3D::setYawPitchRoll(const Vec3& ypr)
 {
 	m_yaw = ypr.x;
 	m_pitch = ypr.y;
@@ -82,7 +76,7 @@ void Node3D::draw()
 	if (getShaderProgram() != NULL)
 	{
 		getShaderProgram()->use();
-
+    
 		glEnable(GL_DEPTH_TEST);
 		glDepthFunc(GL_LEQUAL);
 		draw3D();
@@ -145,7 +139,7 @@ void Node3D::setPosition(float x, float y, float z)
 	m_dirty = true;
 }
 
-void Node3D::setPosition(const ccVertex3F& position)
+void Node3D::setPosition(const Vec3& position)
 {
 	m_position.x = position.x;
 	m_position.y = position.y;
@@ -163,7 +157,7 @@ void Node3D::setPositionZ(float z)
 	m_dirty = true;
 }
 
-const ccVertex3F& Node3D::get3DPosition()
+const Vec3& Node3D::get3DPosition()
 {
 	return m_fullPosition;
 }

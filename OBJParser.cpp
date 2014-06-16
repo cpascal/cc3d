@@ -1,15 +1,9 @@
-#include "MTLParser.h"
+#include "OBJParser.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits>
 
 using namespace cocos3d;
-
-MTLParser::~MTLParser()
-{
-	if (m_copied)
-		return;
-}
 
 string tokenize(string before, string & after, const char * token = " ")
 {
@@ -25,24 +19,24 @@ string tokenize(string before, string & after, const char * token = " ")
     return before.substr(0, tokLength);
 }
 
-ccVertex3F parse3F(string content)
+Vec3 parse3F(string content)
 {
-    ccVertex3F vertex;
+    Vec3 vertex;
 	vertex.x = atof(tokenize(content, content).c_str());
     vertex.y = atof(tokenize(content, content).c_str());
     vertex.z = atof(tokenize(content, content).c_str());
     return vertex;
 }
 
-ccVertex2F parse2F(string content)
+Vec2 parse2F(string content)
 {
-    ccVertex2F vertex;
+    Vec2 vertex;
     vertex.x = atof(tokenize(content, content).c_str());
     vertex.y = atof(tokenize(content, content).c_str());
     return vertex;
 }
 
-bool MTLParser::extractOBJData(istream & objStream)
+bool OBJParser::extractOBJData(istream & objStream)
 {
     int mtl = -1;
     m_partsPerFace = 3;
@@ -105,8 +99,7 @@ bool MTLParser::extractOBJData(istream & objStream)
     return true;
 }
 
-
-void MTLParser::reorgPositions()
+void OBJParser::reorgPositions()
 {
     // for(int p = 0; p < m_positions.size(); ++p)
     //     cout << "initial positions " << m_positions[p].x << " " << m_positions[p].y << " " <<m_positions[p].z << endl;
@@ -144,12 +137,15 @@ void MTLParser::reorgPositions()
                     int tB = m_faces[faceSetSize*i + 4] - 1;
                     int tC = m_faces[faceSetSize*i + 7] - 1;
 
-                    if (tA >= 0)
-                        m_realTexels.push_back(m_texels[tA]);
-                    if (tB >= 0)
-                        m_realTexels.push_back(m_texels[tB]);
-                    if (tC >= 0)
-                        m_realTexels.push_back(m_texels[tC]);
+					if (m_texels.size() > 0)
+					{
+						if (tA >= 0)
+							m_realTexels.push_back(m_texels[tA]);
+						if (tB >= 0)
+							m_realTexels.push_back(m_texels[tB]);
+						if (tC >= 0)
+							m_realTexels.push_back(m_texels[tC]);
+					}
 
                     if (m_partsPerFace > 2)
 					{
@@ -177,10 +173,10 @@ void MTLParser::reorgPositions()
         m_firsts[i + 1] = m_firsts[i] + m_counts[i];
     }
 
-	normalize(m_scale);
+	getBounds();
 }
 
-bool MTLParser::extractMTLData(istream & mtlStream)
+bool OBJParser::extractMTLData(istream & mtlStream)
 {
     if (!mtlStream.good()) 
 	{
@@ -207,24 +203,20 @@ bool MTLParser::extractMTLData(istream & mtlStream)
     return true;
 }
 
-bool MTLParser::readBuffer(const string &objData, const string &mtlData, float scale)
+bool OBJParser::readBuffer(const string &objData, const string &mtlData, float scale)
 {
-	m_scale = scale;
-
     stringstream mtlStream(mtlData.c_str());
     stringstream objStream(objData.c_str());
     return read(objStream, mtlStream);
 }
-bool MTLParser::readFile(const string &objFile, const string &mtlFile, float scale)
+bool OBJParser::readFile(const string &objFile, const string &mtlFile, float scale)
 {
-	m_scale = scale;
-
     ifstream mtlStream(mtlFile.c_str());
     ifstream objStream(objFile.c_str());
     return read(objStream, mtlStream);
 }
 
-bool MTLParser::read(istream &objStream, istream &mtlStream)
+bool OBJParser::read(istream &objStream, istream &mtlStream)
 {
     if (extractMTLData(mtlStream)) 
 	{
@@ -237,7 +229,7 @@ bool MTLParser::read(istream &objStream, istream &mtlStream)
     return false;
 }
 
-void MTLParser::getBounds()
+void OBJParser::getBounds()
 {
 #if (CC_TARGET_PLATFORM != CC_PLATFORM_ANDROID)
 #undef max()
@@ -302,7 +294,7 @@ void MTLParser::getBounds()
     m_radius = max(max(width, height), length);
 }
 
-void MTLParser::normalize(float scaleTo, bool center)
+void OBJParser::normalize(float scaleTo, bool center)
 {
     float width = 0.0f;
     float height = 0.0f;
@@ -329,7 +321,7 @@ void MTLParser::normalize(float scaleTo, bool center)
     getBounds();
 }
 
-void MTLParser::flatNormals()
+void OBJParser::flatNormals()
 {
 	//return;
 
@@ -349,10 +341,10 @@ void MTLParser::flatNormals()
 
 		kmVec3Cross(&normal,&diff1,&diff2);
 
-		ccVertex3F* realNormal = (ccVertex3F*)&normal;
+		Vec3 realNormal = Vec3(normal.x, normal.y, normal.z);
 
-		m_realNormals.push_back(*realNormal);
-		m_realNormals.push_back(*realNormal);
-		m_realNormals.push_back(*realNormal);
+		m_realNormals.push_back(realNormal);
+		m_realNormals.push_back(realNormal);
+		m_realNormals.push_back(realNormal);
 	}
 }
